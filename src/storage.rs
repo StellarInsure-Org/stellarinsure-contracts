@@ -1,41 +1,41 @@
-use soroban_sdk::{Address, Env, String};
+use soroban_sdk::{contracttype, Address, Env};
 
 use crate::{Claim, Error, Policy};
 
-const ADMIN_KEY: &str = "ADMIN";
-const POLICY_COUNTER: &str = "POLICY_CTR";
-
-fn policy_key(policy_id: u64) -> String {
-    String::from_str(&Env::default(), &format!("POLICY_{}", policy_id))
+#[contracttype]
+enum DataKey {
+    Admin,
+    PolicyCounter,
+    Policy(u64),
+    Claim(u64),
 }
 
-fn claim_key(policy_id: u64) -> String {
-    String::from_str(&Env::default(), &format!("CLAIM_{}", policy_id))
+fn policy_key(policy_id: u64) -> DataKey {
+    DataKey::Policy(policy_id)
+}
+
+fn claim_key(policy_id: u64) -> DataKey {
+    DataKey::Claim(policy_id)
 }
 
 pub fn set_admin(env: &Env, admin: &Address) {
-    env.storage()
-        .instance()
-        .set(&String::from_str(env, ADMIN_KEY), admin);
+    env.storage().instance().set(&DataKey::Admin, admin);
 }
 
 pub fn get_admin(env: &Env) -> Address {
-    env.storage()
-        .instance()
-        .get(&String::from_str(env, ADMIN_KEY))
-        .unwrap()
+    env.storage().instance().get(&DataKey::Admin).unwrap()
 }
 
 pub fn set_policy_counter(env: &Env, counter: u64) {
     env.storage()
         .instance()
-        .set(&String::from_str(env, POLICY_COUNTER), &counter);
+        .set(&DataKey::PolicyCounter, &counter);
 }
 
 pub fn get_policy_counter(env: &Env) -> u64 {
     env.storage()
         .instance()
-        .get(&String::from_str(env, POLICY_COUNTER))
+        .get(&DataKey::PolicyCounter)
         .unwrap_or(0)
 }
 

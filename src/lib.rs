@@ -8,10 +8,9 @@ mod types;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, Address, Env};
+use soroban_sdk::{contract, contractimpl, Address, Env, String};
 
 pub use error::Error;
-pub use policy::*;
 pub use types::*;
 
 #[contract]
@@ -26,7 +25,7 @@ impl StellarInsure {
     }
 
     /// Create a new insurance policy
-    /// 
+    ///
     /// # Arguments
     /// * `policyholder` - Address of the policy holder
     /// * `policy_type` - Type of insurance (Weather, SmartContract, Flight, etc.)
@@ -76,12 +75,8 @@ impl StellarInsure {
     }
 
     /// Pay premium for a policy
-    pub fn pay_premium(
-        env: Env,
-        policy_id: u64,
-        amount: i128,
-    ) -> Result<(), Error> {
-        let mut policy = storage::get_policy(&env, policy_id)?;
+    pub fn pay_premium(env: Env, policy_id: u64, amount: i128) -> Result<(), Error> {
+        let policy = storage::get_policy(&env, policy_id)?;
 
         if policy.status != PolicyStatus::Active {
             return Err(Error::PolicyNotActive);
@@ -126,23 +121,23 @@ impl StellarInsure {
         policy.status = PolicyStatus::ClaimPending;
 
         storage::set_policy(&env, policy_id, &policy);
-        storage::set_claim(&env, policy_id, &Claim {
+        storage::set_claim(
+            &env,
             policy_id,
-            claim_amount,
-            proof,
-            timestamp: env.ledger().timestamp(),
-            approved: false,
-        });
+            &Claim {
+                policy_id,
+                claim_amount,
+                proof,
+                timestamp: env.ledger().timestamp(),
+                approved: false,
+            },
+        );
 
         Ok(())
     }
 
     /// Approve or reject a claim (admin only)
-    pub fn process_claim(
-        env: Env,
-        policy_id: u64,
-        approved: bool,
-    ) -> Result<(), Error> {
+    pub fn process_claim(env: Env, policy_id: u64, approved: bool) -> Result<(), Error> {
         let admin = storage::get_admin(&env);
         admin.require_auth();
 
