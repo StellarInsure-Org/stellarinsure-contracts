@@ -115,7 +115,6 @@ pub struct PoolStats {
 pub struct YieldDistributionEvent {
     pub amount: i128,
     pub total_liquidity_before_distribution: i128,
-    pub provider_count: u32,
 }
 
 #[contracttype]

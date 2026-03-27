@@ -8,7 +8,7 @@ use soroban_sdk::{
     Address, Env, String,
 };
 
-fn setup_insurance_contract() -> (Env, Address, Address, Address) {
+fn setup_insurance_contract() -> (Env, Address, Address, Address, Address) {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -17,9 +17,13 @@ fn setup_insurance_contract() -> (Env, Address, Address, Address) {
 
     let admin = Address::generate(&env);
     let policyholder = Address::generate(&env);
-    client.init(&admin);
+    let token_admin = Address::generate(&env);
+    let token_address = env.register_stellar_asset_contract(token_admin);
 
-    (env, contract_id, admin, policyholder)
+    client.init(&admin);
+    client.set_premium_token(&admin, &token_address);
+
+    (env, contract_id, admin, policyholder, token_address)
 }
 
 fn create_policy(
@@ -54,7 +58,7 @@ fn setup_risk_pool() -> (Env, Address, Address, Address, Address) {
 
 #[test]
 fn test_create_policy_stores_expected_values() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -69,7 +73,7 @@ fn test_create_policy_stores_expected_values() {
 
 #[test]
 fn test_create_policy_emits_event() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     create_policy(&env, &client, &policyholder);
@@ -80,7 +84,7 @@ fn test_create_policy_emits_event() {
 #[test]
 #[should_panic]
 fn test_create_policy_rejects_zero_duration() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     client.create_policy(
@@ -95,7 +99,7 @@ fn test_create_policy_rejects_zero_duration() {
 
 #[test]
 fn test_pay_premium_emits_event() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -106,7 +110,7 @@ fn test_pay_premium_emits_event() {
 
 #[test]
 fn test_submit_claim_sets_pending_status_and_emits_event() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -127,7 +131,7 @@ fn test_submit_claim_sets_pending_status_and_emits_event() {
 #[test]
 #[should_panic]
 fn test_submit_claim_rejects_zero_amount() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -137,7 +141,7 @@ fn test_submit_claim_rejects_zero_amount() {
 #[test]
 #[should_panic]
 fn test_submit_claim_rejects_amount_over_coverage() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -147,7 +151,7 @@ fn test_submit_claim_rejects_amount_over_coverage() {
 #[test]
 #[should_panic]
 fn test_submit_claim_rejects_expired_policy() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -160,7 +164,7 @@ fn test_submit_claim_rejects_expired_policy() {
 
 #[test]
 fn test_process_claim_approve_updates_claim_and_policy() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -176,7 +180,7 @@ fn test_process_claim_approve_updates_claim_and_policy() {
 
 #[test]
 fn test_process_claim_reject_sets_rejected_status() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -193,7 +197,7 @@ fn test_process_claim_reject_sets_rejected_status() {
 #[test]
 #[should_panic]
 fn test_process_claim_requires_pending_claim() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);
@@ -202,7 +206,7 @@ fn test_process_claim_requires_pending_claim() {
 
 #[test]
 fn test_cancel_policy_updates_status_and_emits_event() {
-    let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
     let policy_id = create_policy(&env, &client, &policyholder);

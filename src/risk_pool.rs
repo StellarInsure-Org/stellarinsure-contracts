@@ -123,7 +123,6 @@ impl RiskPool {
             YieldDistributionEvent {
                 amount,
                 total_liquidity_before_distribution: total_liquidity,
-                provider_count: providers.len(),
             },
         );
 

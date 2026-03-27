@@ -10,7 +10,7 @@ mod types;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env, String};
 
 pub use error::Error;
 pub use risk_pool::{RiskPool, RiskPoolClient};
@@ -25,6 +25,16 @@ impl StellarInsure {
     pub fn init(env: Env, admin: Address) {
         storage::set_admin(&env, &admin);
         storage::set_policy_counter(&env, 0);
+    }
+
+    /// Set the token used for premiums and payouts (admin only)
+    pub fn set_premium_token(env: Env, admin: Address, token: Address) {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            panic!("Unauthorized");
+        }
+        storage::set_premium_token(&env, &token);
     }
 
     /// Create a new insurance policy
@@ -108,8 +118,13 @@ impl StellarInsure {
             return Err(Error::InvalidPremium);
         }
 
-        // In production, transfer tokens to pool here
-        // For now, we just validate the payment
+        // [SECURITY] Implement actual token transfer for premium (#14)
+        // In this implementation, we transfer from policyholder to the contract.
+        // The contract address can be obtained via env.current_contract_address().
+        let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+        let token_client = TokenClient::new(&env, &token_address);
+        token_client.transfer(&policy.policyholder, &env.current_contract_address(), &amount);
+
         events::publish_premium_paid(
             &env,
             &PremiumPaidEvent {
@@ -194,7 +209,10 @@ impl StellarInsure {
             policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;
 
-            // In production, transfer payout to policyholder here
+            // [SECURITY] Implement actual token transfer for payout (#14)
+            let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+            let token_client = TokenClient::new(&env, &token_address);
+            token_client.transfer(&env.current_contract_address(), &policy.policyholder, &claim.claim_amount);
         } else {
             policy.status = PolicyStatus::ClaimRejected;
             policy.claim_amount = 0;

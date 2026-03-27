@@ -19,4 +19,5 @@ pub enum Error {
     InsufficientLiquidity = 13,
     ProviderNotFound = 14,
     NoYieldAvailable = 15,
+    NotInitialized = 16,
 }

@@ -8,6 +8,7 @@ enum DataKey {
     PolicyCounter,
     Policy(u64),
     Claim(u64),
+    PremiumToken,
     RiskPoolAdmin,
     TotalLiquidity,
     TotalYieldDistributed,
@@ -178,6 +179,14 @@ pub fn get_registered_provider_vec(env: &Env) -> Vec<Address> {
         .get::<_, Providers>(&DataKey::Providers)
         .map(|providers| providers.0)
         .unwrap_or(Vec::new(env))
+}
+
+pub fn get_premium_token(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::PremiumToken)
+}
+
+pub fn set_premium_token(env: &Env, token: &Address) {
+    env.storage().instance().set(&DataKey::PremiumToken, token);
 }
 
 pub fn get_pool_stats(env: &Env) -> PoolStats {
