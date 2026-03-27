@@ -13,4 +13,10 @@ pub enum Error {
     NoPendingClaim = 7,
     Unauthorized = 8,
     ClaimNotFound = 9,
+    AlreadyInitialized = 10,
+    InvalidDuration = 11,
+    InvalidClaimAmount = 12,
+    InsufficientLiquidity = 13,
+    ProviderNotFound = 14,
+    NoYieldAvailable = 15,
 }

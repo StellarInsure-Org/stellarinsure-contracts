@@ -1,7 +1,9 @@
 #![no_std]
 
 mod error;
+mod events;
 mod policy;
+mod risk_pool;
 mod storage;
 mod types;
 
@@ -11,6 +13,7 @@ mod test;
 use soroban_sdk::{contract, contractimpl, Address, Env, String};
 
 pub use error::Error;
+pub use risk_pool::{RiskPool, RiskPoolClient};
 pub use types::*;
 
 #[contract]
@@ -52,6 +55,10 @@ impl StellarInsure {
             return Err(Error::InvalidPremium);
         }
 
+        if duration == 0 {
+            return Err(Error::InvalidDuration);
+        }
+
         let policy_id = storage::get_policy_counter(&env);
         let next_id = policy_id + 1;
 
@@ -70,6 +77,19 @@ impl StellarInsure {
 
         storage::set_policy(&env, policy_id, &policy);
         storage::set_policy_counter(&env, next_id);
+        events::publish_policy_created(
+            &env,
+            &PolicyCreatedEvent {
+                policy_id,
+                policyholder,
+                policy_type: policy.policy_type.clone(),
+                coverage_amount: policy.coverage_amount,
+                premium: policy.premium,
+                start_time: policy.start_time,
+                end_time: policy.end_time,
+                trigger_condition: policy.trigger_condition.clone(),
+            },
+        );
 
         Ok(policy_id)
     }
@@ -90,6 +110,14 @@ impl StellarInsure {
 
         // In production, transfer tokens to pool here
         // For now, we just validate the payment
+        events::publish_premium_paid(
+            &env,
+            &PremiumPaidEvent {
+                policy_id,
+                policyholder: policy.policyholder,
+                amount,
+            },
+        );
 
         Ok(())
     }
@@ -113,6 +141,10 @@ impl StellarInsure {
             return Err(Error::ClaimExceedsCoverage);
         }
 
+        if claim_amount <= 0 {
+            return Err(Error::InvalidClaimAmount);
+        }
+
         if env.ledger().timestamp() > policy.end_time {
             return Err(Error::PolicyExpired);
         }
@@ -127,9 +159,19 @@ impl StellarInsure {
             &Claim {
                 policy_id,
                 claim_amount,
-                proof,
+                proof: proof.clone(),
                 timestamp: env.ledger().timestamp(),
                 approved: false,
+            },
+        );
+        events::publish_claim_submitted(
+            &env,
+            &ClaimSubmittedEvent {
+                policy_id,
+                policyholder: policy.policyholder.clone(),
+                claim_amount,
+                proof,
+                timestamp: env.ledger().timestamp(),
             },
         );
 
@@ -154,12 +196,22 @@ impl StellarInsure {
 
             // In production, transfer payout to policyholder here
         } else {
-            policy.status = PolicyStatus::Active;
+            policy.status = PolicyStatus::ClaimRejected;
             policy.claim_amount = 0;
         }
 
         storage::set_policy(&env, policy_id, &policy);
         storage::set_claim(&env, policy_id, &claim);
+        events::publish_claim_processed(
+            &env,
+            &ClaimProcessedEvent {
+                policy_id,
+                policyholder: policy.policyholder,
+                claim_amount: claim.claim_amount,
+                approved,
+                status: policy.status,
+            },
+        );
 
         Ok(())
     }
@@ -176,6 +228,13 @@ impl StellarInsure {
 
         policy.status = PolicyStatus::Cancelled;
         storage::set_policy(&env, policy_id, &policy);
+        events::publish_policy_cancelled(
+            &env,
+            &PolicyCancelledEvent {
+                policy_id,
+                policyholder: policy.policyholder,
+            },
+        );
 
         Ok(())
     }
