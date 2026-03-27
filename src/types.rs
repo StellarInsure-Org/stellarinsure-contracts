@@ -114,7 +114,7 @@ pub struct PoolStats {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct YieldDistributionEvent {
     pub amount: i128,
-    pub total_liquidity_before_distribution: i128,
+    pub total_liquidity_before: i128,
 }
 
 #[contracttype]
@@ -145,3 +145,69 @@ pub struct YieldClaimedEvent {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Providers(pub Vec<Address>);
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractPausedEvent {
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractUnpausedEvent {
+    pub admin: Address,
+    pub timestamp: u64,
+}
+
+// ── Issue #16 — multi-sig admin types ────────────────────────────────────────
+
+/// Tracks per-claim approval and rejection votes from admins.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct ClaimVotes {
+    pub approvals: Vec<Address>,
+    pub rejections: Vec<Address>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminAddedEvent {
+    pub caller: Address,
+    pub new_admin: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdminRemovedEvent {
+    pub caller: Address,
+    pub removed_admin: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ThresholdUpdatedEvent {
+    pub caller: Address,
+    pub new_threshold: u32,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimVoteCastEvent {
+    pub policy_id: u64,
+    pub voter: Address,
+    pub approve: bool,
+    pub approval_count: u32,
+    pub rejection_count: u32,
+}
+
+// ── Issue #22 — policy renewal types ─────────────────────────────────────────
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyRenewedEvent {
+    pub policy_id: u64,
+    pub policyholder: Address,
+    pub new_end_time: u64,
+    pub renewal_premium: i128,
+}

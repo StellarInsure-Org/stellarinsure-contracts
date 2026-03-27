@@ -1,6 +1,6 @@
 use soroban_sdk::{contracttype, Address, Env, Vec};
 
-use crate::{Claim, Error, Policy, PoolStats, ProviderPosition, Providers};
+use crate::{Claim, ClaimVotes, Error, Policy, PoolStats, ProviderPosition, Providers};
 
 #[contracttype]
 enum DataKey {
@@ -14,6 +14,11 @@ enum DataKey {
     TotalYieldDistributed,
     Provider(Address),
     Providers,
+    Paused,
+    // Issue #16 — multi-sig
+    Admins,
+    Threshold,
+    ClaimVotes(u64),
 }
 
 fn policy_key(policy_id: u64) -> DataKey {
@@ -187,6 +192,87 @@ pub fn get_premium_token(env: &Env) -> Option<Address> {
 
 pub fn set_premium_token(env: &Env, token: &Address) {
     env.storage().instance().set(&DataKey::PremiumToken, token);
+}
+
+pub fn set_paused(env: &Env, paused: bool) {
+    env.storage().instance().set(&DataKey::Paused, &paused);
+}
+
+pub fn get_paused(env: &Env) -> bool {
+    env.storage()
+        .instance()
+        .get(&DataKey::Paused)
+        .unwrap_or(false)
+}
+
+pub fn is_paused(env: &Env) -> bool {
+    get_paused(env)
+}
+
+// ── Multi-sig admin (Issue #16) ──────────────────────────────────────────────
+
+pub fn get_admins(env: &Env) -> Vec<Address> {
+    env.storage()
+        .instance()
+        .get::<_, Vec<Address>>(&DataKey::Admins)
+        .unwrap_or(Vec::new(env))
+}
+
+pub fn set_admins(env: &Env, admins: &Vec<Address>) {
+    env.storage().instance().set(&DataKey::Admins, admins);
+}
+
+/// Check whether `address` is in the multi-sig admin list.
+/// Falls back to the legacy single-admin key so contracts initialised
+/// before multi-sig support was added continue to work.
+pub fn is_admin(env: &Env, address: &Address) -> bool {
+    let admins = get_admins(env);
+    if admins.len() == 0 {
+        // Legacy fallback: check the single Admin key
+        return env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::Admin)
+            .map(|a| a == *address)
+            .unwrap_or(false);
+    }
+    for a in admins.iter() {
+        if a == *address {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn get_threshold(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::Threshold)
+        .unwrap_or(1)
+}
+
+pub fn set_threshold(env: &Env, threshold: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::Threshold, &threshold);
+}
+
+pub fn get_claim_votes(env: &Env, policy_id: u64) -> Option<ClaimVotes> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::ClaimVotes(policy_id))
+}
+
+pub fn set_claim_votes(env: &Env, policy_id: u64, votes: &ClaimVotes) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::ClaimVotes(policy_id), votes);
+}
+
+pub fn clear_claim_votes(env: &Env, policy_id: u64) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::ClaimVotes(policy_id));
 }
 
 pub fn get_pool_stats(env: &Env) -> PoolStats {

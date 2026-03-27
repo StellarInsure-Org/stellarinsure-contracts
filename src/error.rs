@@ -20,4 +20,13 @@ pub enum Error {
     ProviderNotFound = 14,
     NoYieldAvailable = 15,
     NotInitialized = 16,
+    ContractPaused = 17,
+    // Issue #16 — multi-sig admin
+    AdminAlreadyExists = 18,
+    AdminNotFound = 19,
+    InvalidThreshold = 20,
+    AlreadyVoted = 21,
+    // Issue #22 — policy renewal
+    RenewalGracePeriodExpired = 22,
+    PolicyNotRenewable = 23,
 }

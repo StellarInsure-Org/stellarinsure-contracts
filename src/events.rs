@@ -1,8 +1,9 @@
 use soroban_sdk::{symbol_short, Env};
 
 use crate::{
-    ClaimProcessedEvent, ClaimSubmittedEvent, PolicyCancelledEvent, PolicyCreatedEvent,
-    PremiumPaidEvent,
+    AdminAddedEvent, AdminRemovedEvent, ClaimProcessedEvent, ClaimSubmittedEvent,
+    ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent, PolicyCancelledEvent,
+    PolicyCreatedEvent, PolicyRenewedEvent, PremiumPaidEvent, ThresholdUpdatedEvent,
 };
 
 pub fn publish_policy_created(env: &Env, event: &PolicyCreatedEvent) {
@@ -28,4 +29,43 @@ pub fn publish_claim_processed(env: &Env, event: &ClaimProcessedEvent) {
 pub fn publish_policy_cancelled(env: &Env, event: &PolicyCancelledEvent) {
     env.events()
         .publish((symbol_short!("policy"), symbol_short!("cancel")), event.clone());
+}
+
+pub fn publish_contract_paused(env: &Env, event: &ContractPausedEvent) {
+    env.events()
+        .publish((symbol_short!("contract"), symbol_short!("paused")), event.clone());
+}
+
+pub fn publish_contract_unpaused(env: &Env, event: &ContractUnpausedEvent) {
+    env.events()
+        .publish((symbol_short!("contract"), symbol_short!("unpaused")), event.clone());
+}
+
+// ── Issue #16 — multi-sig admin events ───────────────────────────────────────
+
+pub fn publish_admin_added(env: &Env, event: &AdminAddedEvent) {
+    env.events()
+        .publish((symbol_short!("admin"), symbol_short!("added")), event.clone());
+}
+
+pub fn publish_admin_removed(env: &Env, event: &AdminRemovedEvent) {
+    env.events()
+        .publish((symbol_short!("admin"), symbol_short!("removed")), event.clone());
+}
+
+pub fn publish_threshold_updated(env: &Env, event: &ThresholdUpdatedEvent) {
+    env.events()
+        .publish((symbol_short!("admin"), symbol_short!("threshold")), event.clone());
+}
+
+pub fn publish_claim_vote_cast(env: &Env, event: &ClaimVoteCastEvent) {
+    env.events()
+        .publish((symbol_short!("claim"), symbol_short!("voted")), event.clone());
+}
+
+// ── Issue #22 — policy renewal event ─────────────────────────────────────────
+
+pub fn publish_policy_renewed(env: &Env, event: &PolicyRenewedEvent) {
+    env.events()
+        .publish((symbol_short!("policy"), symbol_short!("renewed")), event.clone());
 }

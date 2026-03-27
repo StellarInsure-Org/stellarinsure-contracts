@@ -122,7 +122,7 @@ impl RiskPool {
             (symbol_short!("pool"), symbol_short!("yield")),
             YieldDistributionEvent {
                 amount,
-                total_liquidity_before_distribution: total_liquidity,
+                total_liquidity_before: total_liquidity,
             },
         );
 
