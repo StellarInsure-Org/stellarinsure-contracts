@@ -582,6 +582,22 @@ impl StellarInsure {
             },
         );
 
+    /// Get current contract version
+    pub fn version(env: Env) -> u32 {
+        storage::get_version(&env)
+    }
+
+    /// Upgrade the contract code (admin only)
+    pub fn upgrade(env: Env, new_wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), Error> {
+        let admin = storage::get_admin(&env);
+        admin.require_auth();
+
+        let current_version = storage::get_version(&env);
+        storage::set_version(&env, current_version + 1);
+
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        
+        // Emit an upgrade event if we have one defined, but here we'll just return successfully.
         Ok(())
     }
 }
