@@ -14,6 +14,15 @@ enum DataKey {
     TotalYieldDistributed,
     Provider(Address),
     Providers,
+    Version,
+}
+
+pub fn get_version(env: &Env) -> u32 {
+    env.storage().instance().get(&DataKey::Version).unwrap_or(1)
+}
+
+pub fn set_version(env: &Env, version: u32) {
+    env.storage().instance().set(&DataKey::Version, &version);
 }
 
 fn policy_key(policy_id: u64) -> DataKey {
