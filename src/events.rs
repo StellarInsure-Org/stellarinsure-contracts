@@ -3,7 +3,8 @@ use soroban_sdk::{symbol_short, Env};
 use crate::{
     AdminAddedEvent, AdminRemovedEvent, ClaimProcessedEvent, ClaimSubmittedEvent,
     ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent, PolicyCancelledEvent,
-    PolicyCreatedEvent, PolicyRenewedEvent, PremiumPaidEvent, ThresholdUpdatedEvent,
+    PolicyCreatedEvent, PolicyExpiredEvent, PolicyRenewedEvent, PremiumPaidEvent,
+    ThresholdUpdatedEvent,
 };
 
 pub fn publish_policy_created(env: &Env, event: &PolicyCreatedEvent) {
@@ -68,4 +69,9 @@ pub fn publish_claim_vote_cast(env: &Env, event: &ClaimVoteCastEvent) {
 pub fn publish_policy_renewed(env: &Env, event: &PolicyRenewedEvent) {
     env.events()
         .publish((symbol_short!("policy"), symbol_short!("renewed")), event.clone());
+}
+
+pub fn publish_policy_expired(env: &Env, event: &PolicyExpiredEvent) {
+    env.events()
+        .publish((symbol_short!("policy"), symbol_short!("expired")), event.clone());
 }

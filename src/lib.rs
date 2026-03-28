@@ -14,6 +14,23 @@ mod test;
 
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env, String, Vec};
 
+fn expire_policy_if_needed(env: &Env, policy: &mut Policy, policy_id: u64) {
+    if policy.status == PolicyStatus::Active && policy.is_expired(env.ledger().timestamp()) {
+        let expired_at = env.ledger().timestamp();
+        policy.status = PolicyStatus::Expired;
+        storage::set_policy(env, policy_id, policy);
+        events::publish_policy_expired(
+            env,
+            &PolicyExpiredEvent {
+                policy_id,
+                policyholder: policy.policyholder.clone(),
+                end_time: policy.end_time,
+                expired_at,
+            },
+        );
+    }
+}
+
 pub use error::Error;
 pub use risk_pool::{RiskPool, RiskPoolClient};
 pub use types::*;
@@ -119,7 +136,9 @@ impl StellarInsure {
         if storage::is_paused(&env) {
             return Err(Error::ContractPaused);
         }
-        let policy = storage::get_policy(&env, policy_id)?;
+        let mut policy = storage::get_policy(&env, policy_id)?;
+
+        expire_policy_if_needed(&env, &mut policy, policy_id);
 
         if policy.status != PolicyStatus::Active {
             return Err(Error::PolicyNotActive);
@@ -177,6 +196,7 @@ impl StellarInsure {
         }
 
         if env.ledger().timestamp() > policy.end_time {
+            expire_policy_if_needed(&env, &mut policy, policy_id);
             return Err(Error::PolicyExpired);
         }
 
@@ -556,8 +576,8 @@ impl StellarInsure {
             return Err(Error::InvalidDuration);
         }
 
-        // Only Active policies can be renewed
-        if policy.status != PolicyStatus::Active {
+        // Active and Expired (within grace period) policies can be renewed
+        if policy.status != PolicyStatus::Active && policy.status != PolicyStatus::Expired {
             return Err(Error::PolicyNotRenewable);
         }
 
@@ -605,6 +625,14 @@ impl StellarInsure {
         );
 
         Ok(())
+    }
+
+    /// Check expiration status for a policy, transitioning Active→Expired if needed.
+    /// Returns the current PolicyStatus after the check.
+    pub fn check_expiration(env: Env, policy_id: u64) -> Result<PolicyStatus, Error> {
+        let mut policy = storage::get_policy(&env, policy_id)?;
+        expire_policy_if_needed(&env, &mut policy, policy_id);
+        Ok(policy.status)
     }
 
     /// Get current contract version
