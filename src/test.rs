@@ -846,3 +846,101 @@ fn test_renew_with_zero_duration_fails() {
     let policy_id = create_policy(&env, &client, &policyholder);
     client.renew_policy(&policy_id, &0);
 }
+
+#[test]
+fn test_check_expiration_transitions_active_to_expired() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+
+    let status = client.check_expiration(&policy_id);
+    assert_eq!(status, PolicyStatus::Expired);
+
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.status, PolicyStatus::Expired);
+}
+
+#[test]
+fn test_check_expiration_active_policy_unchanged() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    let status = client.check_expiration(&policy_id);
+    assert_eq!(status, PolicyStatus::Active);
+}
+
+#[test]
+fn test_check_expiration_emits_expired_event() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+
+    let events_before = env.events().all().len();
+    client.check_expiration(&policy_id);
+
+    assert_eq!(env.events().all().len(), events_before + 1);
+}
+
+#[test]
+#[should_panic]
+fn test_pay_premium_rejects_expired_policy() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+
+    client.pay_premium(&policy_id, &10_000);
+}
+
+#[test]
+fn test_renew_expired_policy_via_check_expiration_then_renew() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+
+    client.check_expiration(&policy_id);
+
+    let status = client.get_policy(&policy_id).status;
+    assert_eq!(status, PolicyStatus::Expired);
+
+    client.renew_policy(&policy_id, &2_592_000);
+
+    let renewed = client.get_policy(&policy_id);
+    assert_eq!(renewed.status, PolicyStatus::Active);
+}
+
+#[test]
+#[should_panic]
+fn test_submit_claim_on_expired_policy_updates_status_and_rejects() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+
+    client.submit_claim(&policy_id, &500_000, &String::from_str(&env, "proof"));
+}

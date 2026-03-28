@@ -205,6 +205,15 @@ pub struct ClaimVoteCastEvent {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyExpiredEvent {
+    pub policy_id: u64,
+    pub policyholder: Address,
+    pub end_time: u64,
+    pub expired_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PolicyRenewedEvent {
     pub policy_id: u64,
     pub policyholder: Address,
