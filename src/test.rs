@@ -846,3 +846,85 @@ fn test_renew_with_zero_duration_fails() {
     let policy_id = create_policy(&env, &client, &policyholder);
     client.renew_policy(&policy_id, &0);
 }
+
+// ── Issue #17 — calculate_premium contract entrypoint tests ──────────────────
+
+const ONE_XLM: i128 = 10_000_000; // stroops
+const ONE_YEAR_SECS: u64 = 365 * 24 * 3600;
+const THIRTY_DAYS_SECS: u64 = 30 * 24 * 3600;
+
+#[test]
+fn test_calculate_premium_weather_annual() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    // 1 000 XLM coverage, Weather (3.50 % p.a.) — expect ~35 XLM, no surcharge
+    let coverage = ONE_XLM * 1_000;
+    let premium = client.calculate_premium(&PolicyType::Weather, &coverage, &ONE_YEAR_SECS);
+    let expected = ONE_XLM * 35; // 3.50 % of 1 000 XLM = 35 XLM
+    let delta = (premium - expected).abs();
+    assert!(delta <= 1, "premium={premium} expected≈{expected} delta={delta}");
+}
+
+#[test]
+fn test_calculate_premium_flight_annual() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    // 1 000 XLM coverage, Flight (2.00 % p.a.) — expect ~20 XLM
+    let coverage = ONE_XLM * 1_000;
+    let premium = client.calculate_premium(&PolicyType::Flight, &coverage, &ONE_YEAR_SECS);
+    let expected = ONE_XLM * 20;
+    let delta = (premium - expected).abs();
+    assert!(delta <= 1, "premium={premium} expected≈{expected} delta={delta}");
+}
+
+#[test]
+fn test_calculate_premium_health_higher_than_flight() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let coverage = ONE_XLM * 5_000;
+    let health = client.calculate_premium(&PolicyType::Health, &coverage, &ONE_YEAR_SECS);
+    let flight = client.calculate_premium(&PolicyType::Flight, &coverage, &ONE_YEAR_SECS);
+    assert!(health > flight, "health={health} flight={flight}");
+}
+
+#[test]
+fn test_calculate_premium_duration_scaling() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let coverage = ONE_XLM * 10_000;
+    let short = client.calculate_premium(&PolicyType::Asset, &coverage, &THIRTY_DAYS_SECS);
+    let long = client.calculate_premium(&PolicyType::Asset, &coverage, &ONE_YEAR_SECS);
+    assert!(long > short, "long={long} short={short}");
+}
+
+#[test]
+fn test_calculate_premium_deterministic() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let coverage = ONE_XLM * 2_000;
+    let p1 = client.calculate_premium(&PolicyType::SmartContract, &coverage, &THIRTY_DAYS_SECS);
+    let p2 = client.calculate_premium(&PolicyType::SmartContract, &coverage, &THIRTY_DAYS_SECS);
+    assert_eq!(p1, p2);
+}
+
+#[test]
+#[should_panic]
+fn test_calculate_premium_zero_coverage_panics() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    client.calculate_premium(&PolicyType::Weather, &0, &ONE_YEAR_SECS);
+}
+
+#[test]
+#[should_panic]
+fn test_calculate_premium_zero_duration_panics() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    client.calculate_premium(&PolicyType::Flight, &(ONE_XLM * 100), &0);
+}
+

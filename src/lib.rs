@@ -4,6 +4,7 @@ mod error;
 mod events;
 mod multisig;
 mod policy;
+mod premium;
 mod risk_pool;
 mod storage;
 mod types;
@@ -273,6 +274,27 @@ impl StellarInsure {
         );
 
         Ok(())
+    }
+
+    /// Calculate the premium for a prospective policy without creating it.
+    ///
+    /// This is a read-only helper so callers can present accurate pricing
+    /// in a UI before the policyholder commits to paying gas.
+    ///
+    /// # Arguments
+    /// * `policy_type`      – insurance category that drives the actuarial rate
+    /// * `coverage_amount`  – desired maximum payout in stroops (> 0)
+    /// * `duration_seconds` – intended policy lifetime in seconds (> 0)
+    ///
+    /// # Returns
+    /// The required premium in stroops.
+    pub fn calculate_premium(
+        _env: Env,
+        policy_type: PolicyType,
+        coverage_amount: i128,
+        duration_seconds: u64,
+    ) -> Result<i128, Error> {
+        premium::calculate_premium(&policy_type, coverage_amount, duration_seconds)
     }
 
     /// Get policy details
@@ -581,6 +603,9 @@ impl StellarInsure {
                 renewal_premium,
             },
         );
+
+        Ok(())
+    }
 
     /// Get current contract version
     pub fn version(env: Env) -> u32 {
