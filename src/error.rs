@@ -29,4 +29,5 @@ pub enum Error {
     // Issue #22 — policy renewal
     RenewalGracePeriodExpired = 22,
     PolicyNotRenewable = 23,
+    InsufficientContractBalance = 24,
 }

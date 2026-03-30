@@ -4,7 +4,7 @@ use crate::{
     AdminAddedEvent, AdminRemovedEvent, ClaimProcessedEvent, ClaimSubmittedEvent,
     ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent, PolicyCancelledEvent,
     PolicyCreatedEvent, PolicyExpiredEvent, PolicyRenewedEvent, PremiumPaidEvent,
-    ThresholdUpdatedEvent,
+    ThresholdUpdatedEvent, PayoutEvent,
 };
 
 pub fn publish_policy_created(env: &Env, event: &PolicyCreatedEvent) {
@@ -74,4 +74,9 @@ pub fn publish_policy_renewed(env: &Env, event: &PolicyRenewedEvent) {
 pub fn publish_policy_expired(env: &Env, event: &PolicyExpiredEvent) {
     env.events()
         .publish((symbol_short!("policy"), symbol_short!("expired")), event.clone());
+}
+
+pub fn publish_payout(env: &Env, event: &PayoutEvent) {
+    env.events()
+        .publish((symbol_short!("payout"), symbol_short!("transfer")), event.clone());
 }

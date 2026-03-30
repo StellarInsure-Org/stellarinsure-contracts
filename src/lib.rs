@@ -156,6 +156,9 @@ impl StellarInsure {
         let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
         let token_client = TokenClient::new(&env, &token_address);
         token_client.transfer(&policy.policyholder, &env.current_contract_address(), &amount);
+        
+        let total_premium = storage::get_total_premium(&env);
+        storage::set_total_premium(&env, total_premium + amount);
 
         events::publish_premium_paid(
             &env,
@@ -245,10 +248,25 @@ impl StellarInsure {
             policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;
 
-            // [SECURITY] Implement actual token transfer for payout (#14)
             let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
             let token_client = TokenClient::new(&env, &token_address);
-            token_client.transfer(&env.current_contract_address(), &policy.policyholder, &claim.claim_amount);
+
+            let contract_address = env.current_contract_address();
+            let current_balance = token_client.balance(&contract_address);
+            if current_balance < claim.claim_amount {
+                return Err(Error::InsufficientContractBalance);
+            }
+
+            token_client.transfer(&contract_address, &policy.policyholder, &claim.claim_amount);
+
+            let total_payouts = storage::get_total_payouts(&env);
+            storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
+
+            events::publish_payout(&env, &PayoutEvent {
+                policy_id,
+                policyholder: policy.policyholder.clone(),
+                amount: claim.claim_amount,
+            });
         } else {
             policy.status = PolicyStatus::ClaimRejected;
             policy.claim_amount = 0;
@@ -504,11 +522,27 @@ impl StellarInsure {
             let token_address =
                 storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
             let token_client = TokenClient::new(&env, &token_address);
+            
+            let contract_address = env.current_contract_address();
+            let current_balance = token_client.balance(&contract_address);
+            if current_balance < claim.claim_amount {
+                return Err(Error::InsufficientContractBalance);
+            }
+
             token_client.transfer(
-                &env.current_contract_address(),
+                &contract_address,
                 &policy.policyholder,
                 &claim.claim_amount,
             );
+
+            let total_payouts = storage::get_total_payouts(&env);
+            storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
+
+            events::publish_payout(&env, &PayoutEvent {
+                policy_id,
+                policyholder: policy.policyholder.clone(),
+                amount: claim.claim_amount,
+            });
             storage::set_policy(&env, policy_id, &policy);
             storage::set_claim(&env, policy_id, &claim);
             storage::clear_claim_votes(&env, policy_id);
@@ -608,6 +642,9 @@ impl StellarInsure {
             &policy.premium,
         );
 
+        let total_premium = storage::get_total_premium(&env);
+        storage::set_total_premium(&env, total_premium + policy.premium);
+
         let renewal_premium = policy.premium;
         policy.end_time = new_end_time;
         policy.status = PolicyStatus::Active; // reset if it was effectively expired
@@ -652,5 +689,18 @@ impl StellarInsure {
         
         // Emit an upgrade event if we have one defined, but here we'll just return successfully.
         Ok(())
+    }
+
+    /// Retrieve the overall treasury health metrics.
+    pub fn get_treasury_stats(env: Env) -> Result<TreasuryStats, Error> {
+        let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+        let token_client = TokenClient::new(&env, &token_address);
+        let current_balance = token_client.balance(&env.current_contract_address());
+
+        Ok(TreasuryStats {
+            total_premium_collected: storage::get_total_premium(&env),
+            total_payouts_distributed: storage::get_total_payouts(&env),
+            current_balance,
+        })
     }
 }

@@ -112,6 +112,14 @@ pub struct PoolStats {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TreasuryStats {
+    pub total_premium_collected: i128,
+    pub total_payouts_distributed: i128,
+    pub current_balance: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct YieldDistributionEvent {
     pub amount: i128,
     pub total_liquidity_before: i128,
@@ -219,4 +227,12 @@ pub struct PolicyRenewedEvent {
     pub policyholder: Address,
     pub new_end_time: u64,
     pub renewal_premium: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PayoutEvent {
+    pub policy_id: u64,
+    pub policyholder: Address,
+    pub amount: i128,
 }

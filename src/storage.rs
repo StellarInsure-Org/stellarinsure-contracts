@@ -20,6 +20,8 @@ enum DataKey {
     Threshold,
     ClaimVotes(u64),
     Version,
+    TotalPremium,
+    TotalPayouts,
 }
 
 pub fn get_version(env: &Env) -> u32 {
@@ -282,6 +284,28 @@ pub fn clear_claim_votes(env: &Env, policy_id: u64) {
     env.storage()
         .persistent()
         .remove(&DataKey::ClaimVotes(policy_id));
+}
+
+pub fn get_total_premium(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::TotalPremium)
+        .unwrap_or(0)
+}
+
+pub fn set_total_premium(env: &Env, amount: i128) {
+    env.storage().instance().set(&DataKey::TotalPremium, &amount);
+}
+
+pub fn get_total_payouts(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::TotalPayouts)
+        .unwrap_or(0)
+}
+
+pub fn set_total_payouts(env: &Env, amount: i128) {
+    env.storage().instance().set(&DataKey::TotalPayouts, &amount);
 }
 
 pub fn get_pool_stats(env: &Env) -> PoolStats {
