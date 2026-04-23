@@ -107,7 +107,8 @@ impl RiskPool {
 
         let providers = storage::get_registered_provider_vec(&env);
         for provider in providers.iter() {
-            let mut position = storage::get_provider(&env, &provider).ok_or(Error::ProviderNotFound)?;
+            let mut position =
+                storage::get_provider(&env, &provider).ok_or(Error::ProviderNotFound)?;
             let share = amount * position.contribution / total_liquidity;
             position.accrued_yield += share;
             storage::set_provider(&env, &provider, &position);

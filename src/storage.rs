@@ -105,7 +105,9 @@ pub fn get_risk_pool_admin(env: &Env) -> Address {
 }
 
 pub fn set_total_liquidity(env: &Env, amount: i128) {
-    env.storage().instance().set(&DataKey::TotalLiquidity, &amount);
+    env.storage()
+        .instance()
+        .set(&DataKey::TotalLiquidity, &amount);
 }
 
 pub fn get_total_liquidity(env: &Env) -> i128 {
@@ -294,7 +296,9 @@ pub fn get_total_premium(env: &Env) -> i128 {
 }
 
 pub fn set_total_premium(env: &Env, amount: i128) {
-    env.storage().instance().set(&DataKey::TotalPremium, &amount);
+    env.storage()
+        .instance()
+        .set(&DataKey::TotalPremium, &amount);
 }
 
 pub fn get_total_payouts(env: &Env) -> i128 {
@@ -305,7 +309,9 @@ pub fn get_total_payouts(env: &Env) -> i128 {
 }
 
 pub fn set_total_payouts(env: &Env, amount: i128) {
-    env.storage().instance().set(&DataKey::TotalPayouts, &amount);
+    env.storage()
+        .instance()
+        .set(&DataKey::TotalPayouts, &amount);
 }
 
 pub fn get_pool_stats(env: &Env) -> PoolStats {

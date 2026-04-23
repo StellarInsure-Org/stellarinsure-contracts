@@ -3,17 +3,23 @@
 mod error;
 mod events;
 mod multisig;
+mod oracle;
 mod policy;
 mod premium;
 mod risk_pool;
 mod storage;
 mod types;
-mod oracle;
 
+#[cfg(test)]
+mod fuzz_tests;
 #[cfg(test)]
 mod test;
 
-use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env, String, Vec};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, token::TokenClient, Address, Env, String, Symbol, Vec,
+};
+
+use crate::oracle::OracleProvider;
 
 fn expire_policy_if_needed(env: &Env, policy: &mut Policy, policy_id: u64) {
     if policy.status == PolicyStatus::Active && policy.is_expired(env.ledger().timestamp()) {
@@ -156,8 +162,12 @@ impl StellarInsure {
         // The contract address can be obtained via env.current_contract_address().
         let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
         let token_client = TokenClient::new(&env, &token_address);
-        token_client.transfer(&policy.policyholder, &env.current_contract_address(), &amount);
-        
+        token_client.transfer(
+            &policy.policyholder,
+            &env.current_contract_address(),
+            &amount,
+        );
+
         let total_premium = storage::get_total_premium(&env);
         storage::set_total_premium(&env, total_premium + amount);
 
@@ -263,11 +273,14 @@ impl StellarInsure {
             let total_payouts = storage::get_total_payouts(&env);
             storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
 
-            events::publish_payout(&env, &PayoutEvent {
-                policy_id,
-                policyholder: policy.policyholder.clone(),
-                amount: claim.claim_amount,
-            });
+            events::publish_payout(
+                &env,
+                &PayoutEvent {
+                    policy_id,
+                    policyholder: policy.policyholder.clone(),
+                    amount: claim.claim_amount,
+                },
+            );
         } else {
             policy.status = PolicyStatus::ClaimRejected;
             policy.claim_amount = 0;
@@ -281,6 +294,7 @@ impl StellarInsure {
                 policy_id,
                 policyholder: policy.policyholder,
                 claim_amount: claim.claim_amount,
+                approved,
                 status: policy.status,
             },
         );
@@ -289,13 +303,20 @@ impl StellarInsure {
     }
 
     /// Extensibility stub: Verify arbitrary data conditions via Oracle
-    pub fn verify_oracle_condition(env: Env, oracle_type: Symbol, parameter: Symbol) -> Result<oracle::OracleResult, Error> {
+    pub fn verify_oracle_condition(
+        env: Env,
+        oracle_type: Symbol,
+        parameter: Symbol,
+    ) -> Result<oracle::OracleResult, Error> {
         let result = if oracle_type == symbol_short!("Weather") {
-            oracle::WeatherOracle::verify_condition(&env, parameter).map_err(|_| Error::OracleVerificationFailed)?
+            oracle::WeatherOracle::verify_condition(&env, parameter)
+                .map_err(|_| Error::OracleVerificationFailed)?
         } else if oracle_type == symbol_short!("Flight") {
-            oracle::FlightOracle::verify_condition(&env, parameter).map_err(|_| Error::OracleVerificationFailed)?
+            oracle::FlightOracle::verify_condition(&env, parameter)
+                .map_err(|_| Error::OracleVerificationFailed)?
         } else {
-            oracle::SmartContractOracle::verify_condition(&env, parameter).map_err(|_| Error::OracleVerificationFailed)?
+            oracle::SmartContractOracle::verify_condition(&env, parameter)
+                .map_err(|_| Error::OracleVerificationFailed)?
         };
         Ok(result)
     }
@@ -416,10 +437,7 @@ impl StellarInsure {
         let mut admins = storage::get_admins(&env);
         admins.push_back(new_admin.clone());
         storage::set_admins(&env, &admins);
-        events::publish_admin_added(
-            &env,
-            &AdminAddedEvent { caller, new_admin },
-        );
+        events::publish_admin_added(&env, &AdminAddedEvent { caller, new_admin });
         Ok(())
     }
 
@@ -449,7 +467,10 @@ impl StellarInsure {
         storage::set_admins(&env, &filtered);
         events::publish_admin_removed(
             &env,
-            &AdminRemovedEvent { caller, removed_admin: target },
+            &AdminRemovedEvent {
+                caller,
+                removed_admin: target,
+            },
         );
         Ok(())
     }
@@ -468,7 +489,10 @@ impl StellarInsure {
         storage::set_threshold(&env, threshold);
         events::publish_threshold_updated(
             &env,
-            &ThresholdUpdatedEvent { caller, new_threshold: threshold },
+            &ThresholdUpdatedEvent {
+                caller,
+                new_threshold: threshold,
+            },
         );
         Ok(())
     }
@@ -531,30 +555,28 @@ impl StellarInsure {
             let mut claim = storage::get_claim(&env, policy_id)?;
             policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;
-            let token_address =
-                storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+            let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
             let token_client = TokenClient::new(&env, &token_address);
-            
+
             let contract_address = env.current_contract_address();
             let current_balance = token_client.balance(&contract_address);
             if current_balance < claim.claim_amount {
                 return Err(Error::InsufficientContractBalance);
             }
 
-            token_client.transfer(
-                &contract_address,
-                &policy.policyholder,
-                &claim.claim_amount,
-            );
+            token_client.transfer(&contract_address, &policy.policyholder, &claim.claim_amount);
 
             let total_payouts = storage::get_total_payouts(&env);
             storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
 
-            events::publish_payout(&env, &PayoutEvent {
-                policy_id,
-                policyholder: policy.policyholder.clone(),
-                amount: claim.claim_amount,
-            });
+            events::publish_payout(
+                &env,
+                &PayoutEvent {
+                    policy_id,
+                    policyholder: policy.policyholder.clone(),
+                    amount: claim.claim_amount,
+                },
+            );
             storage::set_policy(&env, policy_id, &policy);
             storage::set_claim(&env, policy_id, &claim);
             storage::clear_claim_votes(&env, policy_id);
@@ -645,8 +667,7 @@ impl StellarInsure {
         let new_end_time = base + duration;
 
         // Collect renewal premium
-        let token_address =
-            storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+        let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
         let token_client = TokenClient::new(&env, &token_address);
         token_client.transfer(
             &policy.policyholder,
@@ -698,7 +719,7 @@ impl StellarInsure {
         storage::set_version(&env, current_version + 1);
 
         env.deployer().update_current_contract_wasm(new_wasm_hash);
-        
+
         // Emit an upgrade event if we have one defined, but here we'll just return successfully.
         Ok(())
     }

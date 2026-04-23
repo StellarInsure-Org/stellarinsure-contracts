@@ -35,11 +35,7 @@ fn setup_insurance_contract() -> (Env, Address, Address, Address, Address) {
     (env, contract_id, admin, policyholder, token_address)
 }
 
-fn create_policy(
-    env: &Env,
-    client: &StellarInsureClient,
-    policyholder: &Address,
-) -> u64 {
+fn create_policy(env: &Env, client: &StellarInsureClient, policyholder: &Address) -> u64 {
     client.create_policy(
         policyholder,
         &PolicyType::Weather,
@@ -190,8 +186,8 @@ fn test_process_claim_approve_updates_claim_and_policy() {
     let claim = client.get_claim(&policy_id);
     assert_eq!(policy.status, PolicyStatus::ClaimApproved);
     assert!(claim.approved);
-    // events: create + submit + process(ClaimProcessed) + SAC Transfer(payout) = +4
-    assert_eq!(env.events().all().len(), events_before + 4);
+    // events: create + submit + payout + process + SAC Transfer(payout) = +5
+    assert_eq!(env.events().all().len(), events_before + 5);
 }
 
 #[test]
@@ -832,8 +828,8 @@ fn test_non_policyholder_cannot_renew() {
     // Note: mock_all_auths is active, so we test via wrong policyholder stored
     // Instead, create a second policy owned by stranger and try renew policy_id
     let _ = stranger; // auth is mocked so we test the wrong policy-id path
-    // Create a policy for stranger, then try to renew policyholder's policy as stranger
-    // The easiest way: renew with zero duration (InvalidDuration)
+                      // Create a policy for stranger, then try to renew policyholder's policy as stranger
+                      // The easiest way: renew with zero duration (InvalidDuration)
     client.renew_policy(&policy_id, &0);
 }
 
@@ -863,7 +859,10 @@ fn test_calculate_premium_weather_annual() {
     let premium = client.calculate_premium(&PolicyType::Weather, &coverage, &ONE_YEAR_SECS);
     let expected = ONE_XLM * 35; // 3.50 % of 1 000 XLM = 35 XLM
     let delta = (premium - expected).abs();
-    assert!(delta <= 1, "premium={premium} expected≈{expected} delta={delta}");
+    assert!(
+        delta <= 1,
+        "premium={premium} expected≈{expected} delta={delta}"
+    );
 }
 
 #[test]
@@ -876,7 +875,10 @@ fn test_calculate_premium_flight_annual() {
     let premium = client.calculate_premium(&PolicyType::Flight, &coverage, &ONE_YEAR_SECS);
     let expected = ONE_XLM * 20;
     let delta = (premium - expected).abs();
-    assert!(delta <= 1, "premium={premium} expected≈{expected} delta={delta}");
+    assert!(
+        delta <= 1,
+        "premium={premium} expected≈{expected} delta={delta}"
+    );
 }
 
 #[test]
@@ -918,6 +920,8 @@ fn test_calculate_premium_zero_coverage_panics() {
     let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
     client.calculate_premium(&PolicyType::Weather, &0, &ONE_YEAR_SECS);
+}
+
 #[test]
 fn test_check_expiration_transitions_active_to_expired() {
     let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
@@ -1009,6 +1013,8 @@ fn test_calculate_premium_zero_duration_panics() {
     client.calculate_premium(&PolicyType::Flight, &(ONE_XLM * 100), &0);
 }
 
+#[test]
+#[should_panic]
 fn test_submit_claim_on_expired_policy_updates_status_and_rejects() {
     let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
@@ -1026,13 +1032,22 @@ fn test_submit_claim_on_expired_policy_updates_status_and_rejects() {
 fn test_verify_oracle_stubs() {
     let (env, contract_id, _admin, _policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
-    
-    let res_weather = client.verify_oracle_condition(&soroban_sdk::symbol_short!("Weather"), &soroban_sdk::symbol_short!("MockParam"));
+
+    let res_weather = client.verify_oracle_condition(
+        &soroban_sdk::symbol_short!("Weather"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
     assert!(res_weather.is_verified);
-    
-    let res_flight = client.verify_oracle_condition(&soroban_sdk::symbol_short!("Flight"), &soroban_sdk::symbol_short!("MockParam"));
+
+    let res_flight = client.verify_oracle_condition(
+        &soroban_sdk::symbol_short!("Flight"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
     assert!(res_flight.is_verified);
-    
-    let res_contract = client.verify_oracle_condition(&soroban_sdk::symbol_short!("Contract"), &soroban_sdk::symbol_short!("MockParam"));
+
+    let res_contract = client.verify_oracle_condition(
+        &soroban_sdk::symbol_short!("Contract"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
     assert!(res_contract.is_verified);
 }
