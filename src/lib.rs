@@ -8,6 +8,7 @@ mod premium;
 mod risk_pool;
 mod storage;
 mod types;
+mod oracle;
 
 #[cfg(test)]
 mod test;
@@ -280,12 +281,23 @@ impl StellarInsure {
                 policy_id,
                 policyholder: policy.policyholder,
                 claim_amount: claim.claim_amount,
-                approved,
                 status: policy.status,
             },
         );
 
         Ok(())
+    }
+
+    /// Extensibility stub: Verify arbitrary data conditions via Oracle
+    pub fn verify_oracle_condition(env: Env, oracle_type: Symbol, parameter: Symbol) -> Result<oracle::OracleResult, Error> {
+        let result = if oracle_type == symbol_short!("Weather") {
+            oracle::WeatherOracle::verify_condition(&env, parameter).map_err(|_| Error::OracleVerificationFailed)?
+        } else if oracle_type == symbol_short!("Flight") {
+            oracle::FlightOracle::verify_condition(&env, parameter).map_err(|_| Error::OracleVerificationFailed)?
+        } else {
+            oracle::SmartContractOracle::verify_condition(&env, parameter).map_err(|_| Error::OracleVerificationFailed)?
+        };
+        Ok(result)
     }
 
     /// Cancel a policy

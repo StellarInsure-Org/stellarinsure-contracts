@@ -1021,3 +1021,18 @@ fn test_submit_claim_on_expired_policy_updates_status_and_rejects() {
 
     client.submit_claim(&policy_id, &500_000, &String::from_str(&env, "proof"));
 }
+
+#[test]
+fn test_verify_oracle_stubs() {
+    let (env, contract_id, _admin, _policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    
+    let res_weather = client.verify_oracle_condition(&soroban_sdk::symbol_short!("Weather"), &soroban_sdk::symbol_short!("MockParam"));
+    assert!(res_weather.is_verified);
+    
+    let res_flight = client.verify_oracle_condition(&soroban_sdk::symbol_short!("Flight"), &soroban_sdk::symbol_short!("MockParam"));
+    assert!(res_flight.is_verified);
+    
+    let res_contract = client.verify_oracle_condition(&soroban_sdk::symbol_short!("Contract"), &soroban_sdk::symbol_short!("MockParam"));
+    assert!(res_contract.is_verified);
+}

@@ -30,4 +30,6 @@ pub enum Error {
     RenewalGracePeriodExpired = 22,
     PolicyNotRenewable = 23,
     InsufficientContractBalance = 24,
+    // Oracle Integration Stub
+    OracleVerificationFailed = 25,
 }
