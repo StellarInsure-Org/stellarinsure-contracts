@@ -3,6 +3,7 @@
 use crate::{
     PolicyStatus, PolicyType, RiskPool, RiskPoolClient, StellarInsure, StellarInsureClient,
 };
+use proptest::prelude::*;
 use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, Env, String};
 
 const ONE_XLM: i128 = 10_000_000;
@@ -27,6 +28,16 @@ fn rand_i128(state: &mut u64, min: i128, max: i128) -> i128 {
 
 fn random_policy_type(state: &mut u64) -> PolicyType {
     match next_u64(state) % 5 {
+        0 => PolicyType::Weather,
+        1 => PolicyType::SmartContract,
+        2 => PolicyType::Flight,
+        3 => PolicyType::Health,
+        _ => PolicyType::Asset,
+    }
+}
+
+fn policy_type_from_index(idx: u8) -> PolicyType {
+    match idx % 5 {
         0 => PolicyType::Weather,
         1 => PolicyType::SmartContract,
         2 => PolicyType::Flight,
@@ -228,5 +239,69 @@ fn fuzz_claim_submission_above_coverage_rejected() {
         let result =
             client.try_submit_claim(&policy_id, &too_large, &String::from_str(&env, "proof"));
         assert!(result.is_err(), "claim above coverage must fail");
+    }
+}
+
+proptest! {
+    #[test]
+    fn proptest_policy_creation_accepts_valid_inputs(
+        policy_type_idx in 0u8..5u8,
+        coverage in 1i128..(ONE_XLM * 1_000_000),
+        duration in 1u64..(365u64 * 24 * 3600 * 5),
+    ) {
+        let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+        let client = StellarInsureClient::new(&env, &contract_id);
+        let policy_type = policy_type_from_index(policy_type_idx);
+        let premium = client.calculate_premium(&policy_type, &coverage, &duration);
+
+        let created_id = client.create_policy(
+            &policyholder,
+            &policy_type,
+            &coverage,
+            &premium,
+            &duration,
+            &String::from_str(&env, "proptest-create"),
+        );
+
+        let stored = client.get_policy(&created_id);
+        prop_assert_eq!(stored.policyholder, policyholder);
+        prop_assert_eq!(stored.coverage_amount, coverage);
+        prop_assert_eq!(stored.status, PolicyStatus::Active);
+    }
+
+    #[test]
+    fn proptest_claim_amounts_stay_within_policy_bounds(
+        coverage in 1i128..(ONE_XLM * 300_000),
+        duration in 60u64..(365u64 * 24 * 3600),
+        claim_amount in 1i128..(ONE_XLM * 300_000),
+    ) {
+        let (env, contract_id, _admin, policyholder) = setup_insurance_contract();
+        let client = StellarInsureClient::new(&env, &contract_id);
+        let premium = client.calculate_premium(&PolicyType::Weather, &coverage, &duration);
+
+        let policy_id = client.create_policy(
+            &policyholder,
+            &PolicyType::Weather,
+            &coverage,
+            &premium,
+            &duration,
+            &String::from_str(&env, "proptest-claim"),
+        );
+
+        if claim_amount <= coverage {
+            let submit_result = client.try_submit_claim(
+                &policy_id,
+                &claim_amount,
+                &String::from_str(&env, "proof"),
+            );
+            prop_assert!(submit_result.is_ok());
+        } else {
+            let submit_result = client.try_submit_claim(
+                &policy_id,
+                &claim_amount,
+                &String::from_str(&env, "proof"),
+            );
+            prop_assert!(submit_result.is_err());
+        }
     }
 }
