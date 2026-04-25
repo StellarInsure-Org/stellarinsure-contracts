@@ -26,6 +26,7 @@ pub enum PolicyStatus {
 pub struct Policy {
     pub id: u64,
     pub policyholder: Address,
+    pub beneficiary: Address,
     pub policy_type: PolicyType,
     pub coverage_amount: i128,
     pub premium: i128,
@@ -235,4 +236,34 @@ pub struct PayoutEvent {
     pub policy_id: u64,
     pub policyholder: Address,
     pub amount: i128,
+}
+
+// ── Issue #21 — Policy modification types ─────────────────────────────────────
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyModifiedCoverageEvent {
+    pub policy_id: u64,
+    pub policyholder: Address,
+    pub old_coverage: i128,
+    pub new_coverage: i128,
+    pub additional_premium: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PolicyExtendedEvent {
+    pub policy_id: u64,
+    pub policyholder: Address,
+    pub old_end_time: u64,
+    pub new_end_time: u64,
+    pub additional_premium: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BeneficiaryChangedEvent {
+    pub policy_id: u64,
+    pub old_beneficiary: Address,
+    pub new_beneficiary: Address,
 }

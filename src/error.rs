@@ -32,4 +32,7 @@ pub enum Error {
     InsufficientContractBalance = 24,
     // Oracle Integration Stub
     OracleVerificationFailed = 25,
+    // Issue #21 — policy modification
+    CoverageDecrease = 26,
+    PolicyAlreadyExpired = 27,
 }

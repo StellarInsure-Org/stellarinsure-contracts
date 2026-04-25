@@ -109,6 +109,7 @@ impl StellarInsure {
         let policy = Policy {
             id: policy_id,
             policyholder: policyholder.clone(),
+            beneficiary: policyholder.clone(),
             policy_type,
             coverage_amount,
             premium,
@@ -341,6 +342,180 @@ impl StellarInsure {
             &PolicyCancelledEvent {
                 policy_id,
                 policyholder: policy.policyholder,
+            },
+        );
+
+        Ok(())
+    }
+
+    // ── Issue #21 — Policy modification functions ─────────────────────────────
+
+    /// Increase the coverage amount of an active policy.
+    /// The policyholder pays an additional premium proportional to the
+    /// coverage increase for the remaining duration.
+    pub fn increase_coverage(
+        env: Env,
+        policy_id: u64,
+        new_coverage: i128,
+    ) -> Result<(), Error> {
+        if storage::is_paused(&env) {
+            return Err(Error::ContractPaused);
+        }
+        let mut policy = storage::get_policy(&env, policy_id)?;
+
+        expire_policy_if_needed(&env, &mut policy, policy_id);
+
+        if policy.status != PolicyStatus::Active {
+            return Err(Error::PolicyNotActive);
+        }
+
+        policy.policyholder.require_auth();
+
+        if new_coverage <= policy.coverage_amount {
+            return Err(Error::CoverageDecrease);
+        }
+
+        let current_time = env.ledger().timestamp();
+        if current_time >= policy.end_time {
+            return Err(Error::PolicyAlreadyExpired);
+        }
+
+        let coverage_delta = new_coverage - policy.coverage_amount;
+        let remaining_duration = policy.end_time - current_time;
+        let additional_premium =
+            premium::calculate_premium(&policy.policy_type, coverage_delta, remaining_duration)?;
+
+        let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+        let token_client = TokenClient::new(&env, &token_address);
+        token_client.transfer(
+            &policy.policyholder,
+            &env.current_contract_address(),
+            &additional_premium,
+        );
+
+        let total_premium = storage::get_total_premium(&env);
+        storage::set_total_premium(&env, total_premium + additional_premium);
+
+        let old_coverage = policy.coverage_amount;
+        policy.coverage_amount = new_coverage;
+        storage::set_policy(&env, policy_id, &policy);
+
+        events::publish_coverage_increased(
+            &env,
+            &PolicyModifiedCoverageEvent {
+                policy_id,
+                policyholder: policy.policyholder,
+                old_coverage,
+                new_coverage,
+                additional_premium,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Extend the end time of an active policy by `extra_seconds`.
+    /// The policyholder pays an additional premium for the added duration.
+    pub fn extend_duration(
+        env: Env,
+        policy_id: u64,
+        extra_seconds: u64,
+    ) -> Result<(), Error> {
+        if storage::is_paused(&env) {
+            return Err(Error::ContractPaused);
+        }
+        if extra_seconds == 0 {
+            return Err(Error::InvalidDuration);
+        }
+
+        let mut policy = storage::get_policy(&env, policy_id)?;
+
+        expire_policy_if_needed(&env, &mut policy, policy_id);
+
+        if policy.status != PolicyStatus::Active {
+            return Err(Error::PolicyNotActive);
+        }
+
+        policy.policyholder.require_auth();
+
+        let current_time = env.ledger().timestamp();
+        if current_time >= policy.end_time {
+            return Err(Error::PolicyAlreadyExpired);
+        }
+
+        let additional_premium =
+            premium::calculate_premium(&policy.policy_type, policy.coverage_amount, extra_seconds)?;
+
+        let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+        let token_client = TokenClient::new(&env, &token_address);
+        token_client.transfer(
+            &policy.policyholder,
+            &env.current_contract_address(),
+            &additional_premium,
+        );
+
+        let total_premium = storage::get_total_premium(&env);
+        storage::set_total_premium(&env, total_premium + additional_premium);
+
+        let old_end_time = policy.end_time;
+        policy.end_time = old_end_time + extra_seconds;
+        storage::set_policy(&env, policy_id, &policy);
+
+        events::publish_duration_extended(
+            &env,
+            &PolicyExtendedEvent {
+                policy_id,
+                policyholder: policy.policyholder,
+                old_end_time,
+                new_end_time: policy.end_time,
+                additional_premium,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Calculate the additional premium required to increase coverage or extend duration.
+    /// Read-only helper for UI pricing before the policyholder commits.
+    pub fn calculate_modification_premium(
+        _env: Env,
+        policy_type: PolicyType,
+        coverage_delta: i128,
+        duration_seconds: u64,
+    ) -> Result<i128, Error> {
+        premium::calculate_premium(&policy_type, coverage_delta, duration_seconds)
+    }
+
+    /// Change the beneficiary of an active policy.
+    /// Only the current policyholder may do this.
+    pub fn change_beneficiary(
+        env: Env,
+        policy_id: u64,
+        new_beneficiary: Address,
+    ) -> Result<(), Error> {
+        if storage::is_paused(&env) {
+            return Err(Error::ContractPaused);
+        }
+        let mut policy = storage::get_policy(&env, policy_id)?;
+
+        expire_policy_if_needed(&env, &mut policy, policy_id);
+
+        if policy.status != PolicyStatus::Active {
+            return Err(Error::PolicyNotActive);
+        }
+
+        policy.policyholder.require_auth();
+
+        let old_beneficiary = policy.beneficiary.clone();
+        policy.beneficiary = new_beneficiary.clone();
+        storage::set_policy(&env, policy_id, &policy);
+
+        events::publish_beneficiary_changed(
+            &env,
+            &BeneficiaryChangedEvent {
+                policy_id,
+                old_beneficiary,
+                new_beneficiary,
             },
         );
 

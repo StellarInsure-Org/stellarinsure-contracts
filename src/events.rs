@@ -1,10 +1,11 @@
 use soroban_sdk::{symbol_short, Env};
 
 use crate::{
-    AdminAddedEvent, AdminRemovedEvent, ClaimProcessedEvent, ClaimSubmittedEvent,
-    ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent, PayoutEvent,
-    PolicyCancelledEvent, PolicyCreatedEvent, PolicyExpiredEvent, PolicyRenewedEvent,
-    PremiumPaidEvent, ThresholdUpdatedEvent,
+    AdminAddedEvent, AdminRemovedEvent, BeneficiaryChangedEvent, ClaimProcessedEvent,
+    ClaimSubmittedEvent, ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent,
+    PayoutEvent, PolicyCancelledEvent, PolicyCreatedEvent, PolicyExpiredEvent,
+    PolicyExtendedEvent, PolicyModifiedCoverageEvent, PolicyRenewedEvent, PremiumPaidEvent,
+    ThresholdUpdatedEvent,
 };
 
 pub fn publish_policy_created(env: &Env, event: &PolicyCreatedEvent) {
@@ -105,6 +106,29 @@ pub fn publish_policy_expired(env: &Env, event: &PolicyExpiredEvent) {
 pub fn publish_payout(env: &Env, event: &PayoutEvent) {
     env.events().publish(
         (symbol_short!("payout"), symbol_short!("transfer")),
+        event.clone(),
+    );
+}
+
+// ── Issue #21 — Policy modification events ────────────────────────────────────
+
+pub fn publish_coverage_increased(env: &Env, event: &PolicyModifiedCoverageEvent) {
+    env.events().publish(
+        (symbol_short!("policy"), symbol_short!("coverage")),
+        event.clone(),
+    );
+}
+
+pub fn publish_duration_extended(env: &Env, event: &PolicyExtendedEvent) {
+    env.events().publish(
+        (symbol_short!("policy"), symbol_short!("extended")),
+        event.clone(),
+    );
+}
+
+pub fn publish_beneficiary_changed(env: &Env, event: &BeneficiaryChangedEvent) {
+    env.events().publish(
+        (symbol_short!("policy"), symbol_short!("benefic")),
         event.clone(),
     );
 }

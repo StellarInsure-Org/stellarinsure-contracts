@@ -1013,6 +1013,141 @@ fn test_calculate_premium_zero_duration_panics() {
     client.calculate_premium(&PolicyType::Flight, &(ONE_XLM * 100), &0);
 }
 
+// ── Issue #21 — Policy modification tests ─────────────────────────────────────
+
+#[test]
+fn test_increase_coverage_updates_policy_and_emits_event() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    // Mint extra tokens so the policyholder can pay the additional premium
+    let token_address = _token;
+    let sac = soroban_sdk::token::StellarAssetClient::new(&env, &token_address);
+    sac.mint(&policyholder, &10_000_000);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let old_coverage = client.get_policy(&policy_id).coverage_amount;
+
+    let events_before = env.events().all().len();
+    client.increase_coverage(&policy_id, &(old_coverage * 2));
+
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.coverage_amount, old_coverage * 2);
+    // emits coverage event + SAC transfer
+    assert!(env.events().all().len() > events_before);
+}
+
+#[test]
+#[should_panic]
+fn test_increase_coverage_rejects_lower_amount() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let coverage = client.get_policy(&policy_id).coverage_amount;
+    client.increase_coverage(&policy_id, &(coverage - 1));
+}
+
+#[test]
+#[should_panic]
+fn test_increase_coverage_blocked_when_paused() {
+    let (env, contract_id, admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    client.pause(&admin);
+    client.increase_coverage(&policy_id, &2_000_000);
+}
+
+#[test]
+fn test_extend_duration_updates_end_time_and_emits_event() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let sac = soroban_sdk::token::StellarAssetClient::new(&env, &_token);
+    sac.mint(&policyholder, &10_000_000);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let old_end = client.get_policy(&policy_id).end_time;
+
+    let extra: u64 = 86_400; // 1 day
+    let events_before = env.events().all().len();
+    client.extend_duration(&policy_id, &extra);
+
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.end_time, old_end + extra);
+    assert!(env.events().all().len() > events_before);
+}
+
+#[test]
+#[should_panic]
+fn test_extend_duration_zero_extra_fails() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    client.extend_duration(&policy_id, &0);
+}
+
+#[test]
+#[should_panic]
+fn test_extend_duration_blocked_when_paused() {
+    let (env, contract_id, admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    client.pause(&admin);
+    client.extend_duration(&policy_id, &86_400);
+}
+
+#[test]
+fn test_calculate_modification_premium_returns_positive() {
+    let (env, contract_id, _admin, _ph, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let premium =
+        client.calculate_modification_premium(&PolicyType::Weather, &ONE_XLM, &86_400u64);
+    assert!(premium > 0, "modification premium must be positive");
+}
+
+#[test]
+fn test_change_beneficiary_updates_and_emits_event() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let new_beneficiary = soroban_sdk::Address::generate(&env);
+
+    let events_before = env.events().all().len();
+    client.change_beneficiary(&policy_id, &new_beneficiary);
+
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.beneficiary, new_beneficiary);
+    assert_eq!(env.events().all().len(), events_before + 1);
+}
+
+#[test]
+#[should_panic]
+fn test_change_beneficiary_blocked_when_paused() {
+    let (env, contract_id, admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let new_beneficiary = soroban_sdk::Address::generate(&env);
+    client.pause(&admin);
+    client.change_beneficiary(&policy_id, &new_beneficiary);
+}
+
+#[test]
+fn test_new_policy_beneficiary_defaults_to_policyholder() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.beneficiary, policyholder);
+}
+
 #[test]
 #[should_panic]
 fn test_submit_claim_on_expired_policy_updates_status_and_rejects() {
