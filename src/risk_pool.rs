@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env};
+use soroban_sdk::{contract, contractimpl, symbol_short, token::TokenClient, Address, Env};
 
 use crate::{
     storage, Error, LiquidityAddedEvent, LiquidityWithdrawnEvent, PoolStats, ProviderPosition,
@@ -160,5 +160,28 @@ impl RiskPool {
 
     pub fn get_pool_stats(env: Env) -> PoolStats {
         storage::get_pool_stats(&env)
+    }
+
+    pub fn fund_payout(env: Env, to: Address, amount: i128) -> Result<(), Error> {
+        let admin = storage::get_risk_pool_admin(&env);
+        admin.require_auth();
+
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let total_liquidity = storage::get_total_liquidity(&env);
+        if amount > total_liquidity {
+            return Err(Error::InsufficientLiquidity);
+        }
+
+        storage::set_total_liquidity(&env, total_liquidity - amount);
+
+        // Perform actual token transfer from RiskPool to 'to'
+        let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+        let token_client = TokenClient::new(&env, &token_address);
+        token_client.transfer(&env.current_contract_address(), &to, &amount);
+        
+        Ok(())
     }
 }

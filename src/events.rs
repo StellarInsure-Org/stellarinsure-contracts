@@ -5,7 +5,7 @@ use crate::{
     ClaimSubmittedEvent, ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent,
     PayoutEvent, PolicyCancelledEvent, PolicyCreatedEvent, PolicyExpiredEvent,
     PolicyExtendedEvent, PolicyModifiedCoverageEvent, PolicyRenewedEvent, PremiumPaidEvent,
-    ThresholdUpdatedEvent,
+    RiskPoolSetEvent, ThresholdUpdatedEvent,
 };
 
 pub fn publish_policy_created(env: &Env, event: &PolicyCreatedEvent) {
@@ -83,6 +83,13 @@ pub fn publish_threshold_updated(env: &Env, event: &ThresholdUpdatedEvent) {
 pub fn publish_claim_vote_cast(env: &Env, event: &ClaimVoteCastEvent) {
     env.events().publish(
         (symbol_short!("claim"), symbol_short!("voted")),
+        event.clone(),
+    );
+}
+
+pub fn publish_risk_pool_set(env: &Env, event: &RiskPoolSetEvent) {
+    env.events().publish(
+        (symbol_short!("admin"), symbol_short!("riskpool")),
         event.clone(),
     );
 }

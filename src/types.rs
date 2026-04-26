@@ -210,6 +210,13 @@ pub struct ClaimVoteCastEvent {
     pub rejection_count: u32,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RiskPoolSetEvent {
+    pub caller: Address,
+    pub risk_pool: Address,
+}
+
 // ── Issue #22 — policy renewal types ─────────────────────────────────────────
 
 #[contracttype]

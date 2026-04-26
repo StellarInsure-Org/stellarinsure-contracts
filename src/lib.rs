@@ -68,6 +68,20 @@ impl StellarInsure {
         storage::set_premium_token(&env, &token);
     }
 
+    pub fn set_risk_pool(env: Env, admin: Address, risk_pool: Address) {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            panic!("Unauthorized");
+        }
+        storage::set_risk_pool(&env, &risk_pool);
+
+        events::publish_risk_pool_set(&env, &RiskPoolSetEvent {
+            caller: admin,
+            risk_pool,
+        });
+    }
+
     /// Create a new insurance policy
     ///
     /// # Arguments
@@ -163,11 +177,19 @@ impl StellarInsure {
         // The contract address can be obtained via env.current_contract_address().
         let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
         let token_client = TokenClient::new(&env, &token_address);
+        let destination = storage::get_risk_pool(&env).unwrap_or_else(|| env.current_contract_address());
+
         token_client.transfer(
             &policy.policyholder,
-            &env.current_contract_address(),
+            &destination,
             &amount,
         );
+
+        if let Some(risk_pool_addr) = storage::get_risk_pool(&env) {
+            let risk_pool_client = RiskPoolClient::new(&env, &risk_pool_addr);
+            risk_pool_client.add_liquidity(&env.current_contract_address(), &amount);
+            risk_pool_client.distribute_yield(&amount);
+        }
 
         let total_premium = storage::get_total_premium(&env);
         storage::set_total_premium(&env, total_premium + amount);
@@ -260,16 +282,21 @@ impl StellarInsure {
             policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;
 
-            let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
-            let token_client = TokenClient::new(&env, &token_address);
+            if let Some(risk_pool_addr) = storage::get_risk_pool(&env) {
+                let risk_pool_client = RiskPoolClient::new(&env, &risk_pool_addr);
+                risk_pool_client.fund_payout(&policy.policyholder, &claim.claim_amount);
+            } else {
+                let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+                let token_client = TokenClient::new(&env, &token_address);
 
-            let contract_address = env.current_contract_address();
-            let current_balance = token_client.balance(&contract_address);
-            if current_balance < claim.claim_amount {
-                return Err(Error::InsufficientContractBalance);
+                let contract_address = env.current_contract_address();
+                let current_balance = token_client.balance(&contract_address);
+                if current_balance < claim.claim_amount {
+                    return Err(Error::InsufficientContractBalance);
+                }
+
+                token_client.transfer(&contract_address, &policy.policyholder, &claim.claim_amount);
             }
-
-            token_client.transfer(&contract_address, &policy.policyholder, &claim.claim_amount);
 
             let total_payouts = storage::get_total_payouts(&env);
             storage::set_total_payouts(&env, total_payouts + claim.claim_amount);

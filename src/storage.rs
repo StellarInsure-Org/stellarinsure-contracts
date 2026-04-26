@@ -22,6 +22,7 @@ enum DataKey {
     Version,
     TotalPremium,
     TotalPayouts,
+    RiskPool,
 }
 
 pub fn get_version(env: &Env) -> u32 {
@@ -312,6 +313,14 @@ pub fn set_total_payouts(env: &Env, amount: i128) {
     env.storage()
         .instance()
         .set(&DataKey::TotalPayouts, &amount);
+}
+
+pub fn get_risk_pool(env: &Env) -> Option<Address> {
+    env.storage().instance().get(&DataKey::RiskPool)
+}
+
+pub fn set_risk_pool(env: &Env, risk_pool: &Address) {
+    env.storage().instance().set(&DataKey::RiskPool, risk_pool);
 }
 
 pub fn get_pool_stats(env: &Env) -> PoolStats {
