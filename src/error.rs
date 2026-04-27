@@ -35,4 +35,10 @@ pub enum Error {
     // Issue #21 — policy modification
     CoverageDecrease = 26,
     PolicyAlreadyExpired = 27,
+    // Issue #203 — premium verification
+    PremiumMismatch = 28,
+    // Issue #199 — policy count limit
+    MaxPoliciesReached = 29,
+    // Issue #202 — risk pool withdrawal protection
+    InsufficientPoolReserve = 30,
 }

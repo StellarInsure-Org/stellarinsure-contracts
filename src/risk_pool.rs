@@ -18,8 +18,32 @@ impl RiskPool {
         storage::set_risk_pool_admin(&env, &admin);
         storage::set_total_liquidity(&env, 0);
         storage::set_total_yield_distributed(&env, 0);
+        storage::set_reserve_ratio(&env, 2000);
 
         Ok(())
+    }
+
+    pub fn set_reserve_ratio(env: Env, admin: Address, ratio: u32) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_risk_pool_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        if ratio > 10000 {
+            return Err(Error::InvalidAmount);
+        }
+        storage::set_reserve_ratio(&env, ratio);
+        Ok(())
+    }
+
+    pub fn get_reserve_ratio(env: Env) -> u32 {
+        storage::get_reserve_ratio(&env)
+    }
+
+    fn calculate_pending_claims_reserve(env: &Env) -> i128 {
+        let total_liquidity = storage::get_total_liquidity(env);
+        let reserve_ratio = storage::get_reserve_ratio(env);
+        total_liquidity * (reserve_ratio as i128) / 10000
     }
 
     pub fn add_liquidity(env: Env, provider: Address, amount: i128) -> Result<(), Error> {
@@ -68,8 +92,16 @@ impl RiskPool {
             return Err(Error::InsufficientLiquidity);
         }
 
+        let total_liquidity = storage::get_total_liquidity(&env);
+        let reserve_required = Self::calculate_pending_claims_reserve(&env);
+        let available_balance = total_liquidity - reserve_required;
+
+        if amount > available_balance {
+            return Err(Error::InsufficientPoolReserve);
+        }
+
         position.contribution -= amount;
-        let new_total = storage::get_total_liquidity(&env) - amount;
+        let new_total = total_liquidity - amount;
         storage::set_total_liquidity(&env, new_total);
 
         if position.contribution == 0 && position.accrued_yield == 0 {

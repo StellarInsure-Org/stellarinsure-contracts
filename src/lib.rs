@@ -45,6 +45,8 @@ pub use types::*;
 #[contract]
 pub struct StellarInsure;
 
+const MAX_POLICIES: u64 = 1_000_000;
+
 #[contractimpl]
 impl StellarInsure {
     /// Initialize the insurance protocol
@@ -56,6 +58,26 @@ impl StellarInsure {
         storage::set_admins(&env, &admins);
         storage::set_threshold(&env, 1);
         storage::set_policy_counter(&env, 0);
+        storage::set_max_policies(&env, MAX_POLICIES);
+    }
+
+    /// Set the maximum number of policies allowed (admin only)
+    pub fn set_max_policies(env: Env, admin: Address, max_policies: u64) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        if max_policies == 0 {
+            return Err(Error::InvalidAmount);
+        }
+        storage::set_max_policies(&env, max_policies);
+        Ok(())
+    }
+
+    /// Get the maximum number of policies allowed
+    pub fn get_max_policies(env: Env) -> u64 {
+        storage::get_max_policies(&env)
     }
 
     /// Set the token used for premiums and payouts (admin only)
@@ -118,6 +140,16 @@ impl StellarInsure {
         }
 
         let policy_id = storage::get_policy_counter(&env);
+        let max_policies = storage::get_max_policies(&env);
+        if policy_id >= max_policies {
+            return Err(Error::MaxPoliciesReached);
+        }
+
+        let calculated_premium = premium::calculate_premium(&policy_type, coverage_amount, duration)?;
+        if premium != calculated_premium {
+            return Err(Error::PremiumMismatch);
+        }
+
         let next_id = policy_id + 1;
 
         let policy = Policy {

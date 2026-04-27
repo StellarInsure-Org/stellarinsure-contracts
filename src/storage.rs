@@ -23,6 +23,10 @@ enum DataKey {
     TotalPremium,
     TotalPayouts,
     RiskPool,
+    // Issue #199 — max policies
+    MaxPolicies,
+    // Issue #202 — reserve ratio
+    ReserveRatio,
 }
 
 pub fn get_version(env: &Env) -> u32 {
@@ -331,4 +335,30 @@ pub fn get_pool_stats(env: &Env) -> PoolStats {
         total_yield_distributed: get_total_yield_distributed(env),
         provider_count: providers.len(),
     }
+}
+
+pub fn set_max_policies(env: &Env, max_policies: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::MaxPolicies, &max_policies);
+}
+
+pub fn get_max_policies(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::MaxPolicies)
+        .unwrap_or(1_000_000)
+}
+
+pub fn set_reserve_ratio(env: &Env, ratio: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::ReserveRatio, &ratio);
+}
+
+pub fn get_reserve_ratio(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::ReserveRatio)
+        .unwrap_or(2000)
 }
