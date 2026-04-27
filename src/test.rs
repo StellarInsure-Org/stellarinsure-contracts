@@ -843,6 +843,50 @@ fn test_renew_with_zero_duration_fails() {
     client.renew_policy(&policy_id, &0);
 }
 
+#[test]
+fn test_renew_policy_recalculates_premium() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let original_premium = client.get_policy(&policy_id).premium;
+
+    // Renew with a longer duration — premium should be recalculated
+    let renewal_duration: u64 = 5_184_000; // 60 days
+    client.renew_policy(&policy_id, &renewal_duration);
+
+    let renewed = client.get_policy(&policy_id);
+    // Premium should now reflect the renewal duration, not the original policy premium
+    let expected_premium = client.calculate_premium(
+        &PolicyType::Weather,
+        &1_000_000,
+        &renewal_duration,
+    );
+    assert_eq!(renewed.premium, expected_premium);
+    // Sanity: a 60-day renewal should cost more than the original 30-day premium
+    assert!(renewed.premium > original_premium);
+}
+
+#[test]
+fn test_renew_policy_updates_stored_premium() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    // Renew with half the original duration — premium should be lower
+    let short_renewal: u64 = 1_296_000; // 15 days
+    client.renew_policy(&policy_id, &short_renewal);
+
+    let renewed = client.get_policy(&policy_id);
+    let expected_premium = client.calculate_premium(
+        &PolicyType::Weather,
+        &1_000_000,
+        &short_renewal,
+    );
+    assert_eq!(renewed.premium, expected_premium);
+}
+
 // ── Issue #17 — calculate_premium contract entrypoint tests ──────────────────
 
 const ONE_XLM: i128 = 10_000_000; // stroops

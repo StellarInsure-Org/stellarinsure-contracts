@@ -868,19 +868,23 @@ impl StellarInsure {
         };
         let new_end_time = base + duration;
 
+        // Recalculate premium at current rates for the renewal duration
+        let renewal_premium =
+            premium::calculate_premium(&policy.policy_type, policy.coverage_amount, duration)?;
+
         // Collect renewal premium
         let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
         let token_client = TokenClient::new(&env, &token_address);
         token_client.transfer(
             &policy.policyholder,
             &env.current_contract_address(),
-            &policy.premium,
+            &renewal_premium,
         );
 
         let total_premium = storage::get_total_premium(&env);
-        storage::set_total_premium(&env, total_premium + policy.premium);
+        storage::set_total_premium(&env, total_premium + renewal_premium);
 
-        let renewal_premium = policy.premium;
+        policy.premium = renewal_premium;
         policy.end_time = new_end_time;
         policy.status = PolicyStatus::Active; // reset if it was effectively expired
 
