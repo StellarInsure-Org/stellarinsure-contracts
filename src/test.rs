@@ -1230,3 +1230,180 @@ fn test_verify_oracle_stubs() {
     );
     assert!(res_contract.is_verified);
 }
+
+// ── Tests for Issue #203: Premium verification ───────────────────────────────
+
+#[test]
+#[should_panic(expected = "PremiumMismatch")]
+fn test_create_policy_rejects_incorrect_premium() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    // Calculate correct premium
+    let correct_premium = client.calculate_premium(
+        &PolicyType::Weather,
+        &1_000_000,
+        &2_592_000,
+    );
+
+    // Try to create policy with incorrect premium
+    client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &(correct_premium - 1000), // Wrong premium
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    ).unwrap();
+}
+
+#[test]
+fn test_create_policy_accepts_correct_premium() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let correct_premium = client.calculate_premium(
+        &PolicyType::Weather,
+        &1_000_000,
+        &2_592_000,
+    );
+
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &correct_premium,
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    ).unwrap();
+
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.premium, correct_premium);
+}
+
+// ── Tests for Issue #199: Max policy count limit ─────────────────────────────
+
+#[test]
+fn test_set_max_policies() {
+    let (env, contract_id, admin, _policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    client.set_max_policies(&admin, &100).unwrap();
+    let max_policies = client.get_max_policies();
+    assert_eq!(max_policies, 100);
+}
+
+#[test]
+#[should_panic(expected = "Unauthorized")]
+fn test_set_max_policies_requires_admin() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    client.set_max_policies(&policyholder, &100).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "MaxPoliciesReached")]
+fn test_create_policy_respects_max_limit() {
+    let (env, contract_id, admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    // Set limit to 2 policies
+    client.set_max_policies(&admin, &2).unwrap();
+
+    // Create 2 policies successfully
+    let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
+    
+    client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, "condition1"),
+    ).unwrap();
+
+    client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, "condition2"),
+    ).unwrap();
+
+    // Third policy should fail
+    client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, "condition3"),
+    ).unwrap();
+}
+
+// ── Tests for Issue #202: Risk pool withdrawal protection ────────────────────
+
+#[test]
+fn test_set_reserve_ratio() {
+    let (env, contract_id, admin, _provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    client.set_reserve_ratio(&admin, &3000).unwrap(); // 30%
+    let ratio = client.get_reserve_ratio();
+    assert_eq!(ratio, 3000);
+}
+
+#[test]
+#[should_panic(expected = "Unauthorized")]
+fn test_set_reserve_ratio_requires_admin() {
+    let (env, contract_id, _admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    client.set_reserve_ratio(&provider_one, &3000).unwrap();
+}
+
+#[test]
+#[should_panic(expected = "InsufficientPoolReserve")]
+fn test_withdraw_respects_reserve_ratio() {
+    let (env, contract_id, admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    // Set reserve ratio to 50%
+    client.set_reserve_ratio(&admin, &5000).unwrap();
+
+    // Add liquidity
+    client.add_liquidity(&provider_one, &1_000_000).unwrap();
+
+    // Try to withdraw more than available (should leave 50% reserve)
+    // Available = 1_000_000 - (1_000_000 * 50%) = 500_000
+    client.withdraw_liquidity(&provider_one, &600_000).unwrap();
+}
+
+#[test]
+fn test_withdraw_within_reserve_succeeds() {
+    let (env, contract_id, admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    // Set reserve ratio to 20%
+    client.set_reserve_ratio(&admin, &2000).unwrap();
+
+    // Add liquidity
+    client.add_liquidity(&provider_one, &1_000_000).unwrap();
+
+    // Withdraw within available amount (80% of total)
+    client.withdraw_liquidity(&provider_one, &700_000).unwrap();
+
+    let position = client.get_provider_position(&provider_one);
+    assert_eq!(position.contribution, 300_000);
+}
+
+#[test]
+fn test_default_reserve_ratio_is_20_percent() {
+    let (env, contract_id, _admin, _provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    let ratio = client.get_reserve_ratio();
+    assert_eq!(ratio, 2000); // 20%
+}
