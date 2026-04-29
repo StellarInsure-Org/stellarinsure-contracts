@@ -15,11 +15,11 @@ impl Policy {
 
     /// Check if policy can accept claims
     pub fn can_claim(&self, current_time: u64) -> bool {
-        self.is_active() && !self.is_expired(current_time)
+        self.is_active() && !self.is_expired(current_time) && self.remaining_coverage() > 0
     }
 
     /// Calculate remaining coverage
     pub fn remaining_coverage(&self) -> i128 {
-        self.coverage_amount - self.claim_amount
+        self.coverage_amount - self.total_claimed
     }
 }

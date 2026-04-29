@@ -481,7 +481,7 @@ fn test_init_creates_admin_list_with_threshold_one() {
 
     let admins = client.get_admins();
     assert_eq!(admins.len(), 1);
-    assert_eq!(admins.get(0).unwrap(), admin);
+    assert_eq!(admins.get(0), admin);
     assert_eq!(client.get_threshold(), 1);
 }
 
@@ -1254,7 +1254,7 @@ fn test_create_policy_rejects_incorrect_premium() {
         &(correct_premium - 1000), // Wrong premium
         &2_592_000,
         &String::from_str(&env, "temperature < 0"),
-    ).unwrap();
+    );
 }
 
 #[test]
@@ -1275,7 +1275,7 @@ fn test_create_policy_accepts_correct_premium() {
         &correct_premium,
         &2_592_000,
         &String::from_str(&env, "temperature < 0"),
-    ).unwrap();
+    );
 
     let policy = client.get_policy(&policy_id);
     assert_eq!(policy.premium, correct_premium);
@@ -1288,7 +1288,7 @@ fn test_set_max_policies() {
     let (env, contract_id, admin, _policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
-    client.set_max_policies(&admin, &100).unwrap();
+    client.set_max_policies(&admin, &100);
     let max_policies = client.get_max_policies();
     assert_eq!(max_policies, 100);
 }
@@ -1299,7 +1299,7 @@ fn test_set_max_policies_requires_admin() {
     let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
 
-    client.set_max_policies(&policyholder, &100).unwrap();
+    client.set_max_policies(&policyholder, &100);
 }
 
 #[test]
@@ -1309,7 +1309,7 @@ fn test_create_policy_respects_max_limit() {
     let client = StellarInsureClient::new(&env, &contract_id);
 
     // Set limit to 2 policies
-    client.set_max_policies(&admin, &2).unwrap();
+    client.set_max_policies(&admin, &2);
 
     // Create 2 policies successfully
     let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
@@ -1321,7 +1321,7 @@ fn test_create_policy_respects_max_limit() {
         &premium,
         &2_592_000,
         &String::from_str(&env, "condition1"),
-    ).unwrap();
+    );
 
     client.create_policy(
         &policyholder,
@@ -1330,7 +1330,7 @@ fn test_create_policy_respects_max_limit() {
         &premium,
         &2_592_000,
         &String::from_str(&env, "condition2"),
-    ).unwrap();
+    );
 
     // Third policy should fail
     client.create_policy(
@@ -1340,7 +1340,7 @@ fn test_create_policy_respects_max_limit() {
         &premium,
         &2_592_000,
         &String::from_str(&env, "condition3"),
-    ).unwrap();
+    );
 }
 
 // ── Tests for Issue #202: Risk pool withdrawal protection ────────────────────
@@ -1350,7 +1350,7 @@ fn test_set_reserve_ratio() {
     let (env, contract_id, admin, _provider_one, _provider_two) = setup_risk_pool();
     let client = RiskPoolClient::new(&env, &contract_id);
 
-    client.set_reserve_ratio(&admin, &3000).unwrap(); // 30%
+    client.set_reserve_ratio(&admin, &3000); // 30%
     let ratio = client.get_reserve_ratio();
     assert_eq!(ratio, 3000);
 }
@@ -1361,7 +1361,7 @@ fn test_set_reserve_ratio_requires_admin() {
     let (env, contract_id, _admin, provider_one, _provider_two) = setup_risk_pool();
     let client = RiskPoolClient::new(&env, &contract_id);
 
-    client.set_reserve_ratio(&provider_one, &3000).unwrap();
+    client.set_reserve_ratio(&provider_one, &3000);
 }
 
 #[test]
@@ -1371,14 +1371,14 @@ fn test_withdraw_respects_reserve_ratio() {
     let client = RiskPoolClient::new(&env, &contract_id);
 
     // Set reserve ratio to 50%
-    client.set_reserve_ratio(&admin, &5000).unwrap();
+    client.set_reserve_ratio(&admin, &5000);
 
     // Add liquidity
-    client.add_liquidity(&provider_one, &1_000_000).unwrap();
+    client.add_liquidity(&provider_one, &1_000_000);
 
     // Try to withdraw more than available (should leave 50% reserve)
     // Available = 1_000_000 - (1_000_000 * 50%) = 500_000
-    client.withdraw_liquidity(&provider_one, &600_000).unwrap();
+    client.withdraw_liquidity(&provider_one, &600_000);
 }
 
 #[test]
@@ -1387,13 +1387,13 @@ fn test_withdraw_within_reserve_succeeds() {
     let client = RiskPoolClient::new(&env, &contract_id);
 
     // Set reserve ratio to 20%
-    client.set_reserve_ratio(&admin, &2000).unwrap();
+    client.set_reserve_ratio(&admin, &2000);
 
     // Add liquidity
-    client.add_liquidity(&provider_one, &1_000_000).unwrap();
+    client.add_liquidity(&provider_one, &1_000_000);
 
     // Withdraw within available amount (80% of total)
-    client.withdraw_liquidity(&provider_one, &700_000).unwrap();
+    client.withdraw_liquidity(&provider_one, &700_000);
 
     let position = client.get_provider_position(&provider_one);
     assert_eq!(position.contribution, 300_000);
@@ -1406,4 +1406,60 @@ fn test_default_reserve_ratio_is_20_percent() {
 
     let ratio = client.get_reserve_ratio();
     assert_eq!(ratio, 2000); // 20%
+}
+
+#[test]
+fn test_multiple_partial_claims_accumulate_correctly() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let orig_policy = client.get_policy(&policy_id);
+    let coverage = orig_policy.coverage_amount; // e.g. 1_000_000
+
+    // First partial claim
+    let claim_one = 300_000;
+    client.submit_claim(&policy_id, &claim_one, &String::from_str(&env, "proof1"));
+    client.process_claim(&policy_id, &true);
+
+    let policy_after_one = client.get_policy(&policy_id);
+    assert_eq!(policy_after_one.total_claimed, 300_000);
+    assert_eq!(policy_after_one.status, PolicyStatus::Active); // Should remain active
+
+    // Second partial claim
+    let claim_two = 400_000;
+    client.submit_claim(&policy_id, &claim_two, &String::from_str(&env, "proof2"));
+    client.process_claim(&policy_id, &true);
+
+    let policy_after_two = client.get_policy(&policy_id);
+    assert_eq!(policy_after_two.total_claimed, 700_000);
+    assert_eq!(policy_after_two.status, PolicyStatus::Active);
+
+    // Final claim that exhausts it
+    let claim_three = coverage - 700_000; // 300_000
+    client.submit_claim(&policy_id, &claim_three, &String::from_str(&env, "proof3"));
+    client.process_claim(&policy_id, &true);
+
+    let final_policy = client.get_policy(&policy_id);
+    assert_eq!(final_policy.total_claimed, coverage);
+    assert_eq!(final_policy.status, PolicyStatus::ClaimApproved); // Now exhausted
+}
+
+#[test]
+#[should_panic]
+fn test_partial_claim_exceeding_remaining_coverage_is_rejected() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let orig_policy = client.get_policy(&policy_id);
+    let coverage = orig_policy.coverage_amount;
+
+    // First claim takes most of the coverage
+    let claim_one = coverage - 50_000;
+    client.submit_claim(&policy_id, &claim_one, &String::from_str(&env, "proof1"));
+    client.process_claim(&policy_id, &true);
+
+    // Second claim attempts to take more than what's remaining (which is 50_000)
+    client.submit_claim(&policy_id, &100_000, &String::from_str(&env, "proof2"));
 }

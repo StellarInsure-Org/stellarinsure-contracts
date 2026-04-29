@@ -35,6 +35,7 @@ pub struct Policy {
     pub trigger_condition: String,
     pub status: PolicyStatus,
     pub claim_amount: i128,
+    pub total_claimed: i128,
 }
 
 #[contracttype]

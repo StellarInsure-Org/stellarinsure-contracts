@@ -1,0 +1,267 @@
+    Checking cfg-if v1.0.4
+   Compiling serde_core v1.0.228
+   Compiling zmij v1.0.21
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.0
+    Checking libc v0.2.183
+    Checking zeroize v1.8.2
+    Checking typenum v1.19.0
+    Checking subtle v2.6.1
+    Checking const-oid v0.9.6
+   Compiling semver v1.0.27
+   Compiling thiserror v1.0.69
+   Compiling base32 v0.4.0
+   Compiling escape-bytes v0.1.1
+    Checking der v0.7.10
+   Compiling rustc_version v0.4.1
+    Checking base16ct v0.2.0
+    Checking num-traits v0.2.19
+    Checking generic-array v0.14.9
+    Checking zerocopy v0.8.47
+    Checking cpufeatures v0.2.17
+    Checking libm v0.2.16
+    Checking crypto-common v0.1.6
+    Checking block-buffer v0.10.4
+    Checking sec1 v0.7.3
+    Checking getrandom v0.2.17
+    Checking digest v0.10.7
+    Checking rand_core v0.6.4
+   Compiling curve25519-dalek v4.1.3
+    Checking hmac v0.12.1
+    Checking ff v0.13.1
+    Checking signature v2.2.0
+    Checking group v0.13.0
+    Checking crypto-bigint v0.5.5
+    Checking rfc6979 v0.4.0
+    Checking sha2 v0.10.9
+   Compiling equivalent v1.0.2
+    Checking hashbrown v0.16.1
+    Checking downcast-rs v1.2.1
+    Checking serde v1.0.228
+    Checking indexmap-nostd v0.4.0
+   Compiling serde_json v1.0.149
+   Compiling serde_with v3.18.0
+    Checking indexmap v2.13.0
+    Checking hex v0.4.3
+    Checking wasmparser-nostd v0.100.2
+    Checking elliptic-curve v0.13.8
+    Checking wasmi_core v0.13.0
+    Checking ecdsa v0.16.9
+   Compiling crate-git-revision v0.0.6
+    Checking arbitrary v1.3.2
+    Checking getrandom v0.3.4
+    Checking adler2 v2.0.1
+    Checking spin v0.9.8
+   Compiling fnv v1.0.7
+   Compiling stellar-strkey v0.0.8
+   Compiling stellar-xdr v21.2.0
+   Compiling soroban-env-common v21.2.1
+    Checking wasmi_arena v0.4.1
+    Checking smallvec v1.15.1
+    Checking base64 v0.13.1
+    Checking gimli v0.32.3
+   Compiling darling_core v0.20.11
+    Checking wasmparser v0.116.1
+    Checking ppv-lite86 v0.2.21
+    Checking rand_core v0.9.5
+    Checking miniz_oxide v0.8.9
+    Checking rand_chacha v0.3.1
+    Checking soroban-wasmi v0.31.1-soroban.20.0.1
+    Checking primeorder v0.13.6
+    Checking addr2line v0.25.1
+    Checking object v0.37.3
+    Checking ed25519 v2.2.3
+    Checking bitflags v2.11.0
+    Checking keccak v0.1.6
+    Checking ethnum v1.5.2
+    Checking rustc-demangle v0.1.27
+    Checking linux-raw-sys v0.12.1
+    Checking static_assertions v1.1.0
+   Compiling darling_macro v0.20.11
+    Checking rustix v1.1.4
+    Checking sha3 v0.10.8
+    Checking ed25519-dalek v2.2.0
+    Checking p256 v0.13.2
+    Checking rand v0.8.5
+    Checking getrandom v0.4.2
+   Compiling soroban-sdk-macros v21.7.7
+    Checking k256 v0.13.4
+    Checking num-integer v0.1.46
+    Checking fastrand v2.3.0
+    Checking once_cell v1.21.4
+    Checking hex-literal v0.4.1
+   Compiling darling v0.20.11
+    Checking wait-timeout v0.2.1
+    Checking tempfile v3.27.0
+   Compiling soroban-sdk v21.7.7
+    Checking quick-error v1.2.3
+    Checking bit-vec v0.8.0
+    Checking rusty-fork v0.3.1
+    Checking bit-set v0.8.0
+    Checking rand_chacha v0.9.0
+    Checking rand v0.9.2
+    Checking rand_xorshift v0.4.0
+    Checking backtrace v0.3.76
+    Checking unarray v0.1.4
+    Checking regex-syntax v0.8.10
+    Checking proptest v1.11.0
+   Compiling soroban-spec v21.7.7
+   Compiling soroban-spec-rust v21.7.7
+   Compiling soroban-env-macros v21.2.1
+    Checking soroban-env-host v21.2.1
+    Checking soroban-ledger-snapshot v21.7.7
+    Checking stellarinsure v0.1.0 (/home/zarcc/Documents/GitHub/WEB3/drips/StellarInsure/smartcontract)
+warning: use of deprecated method `soroban_sdk::Env::register_stellar_asset_contract`: use [Env::register_stellar_asset_contract_v2]
+  --> src/fuzz_tests.rs:59:29
+   |
+59 |     let token_address = env.register_stellar_asset_contract(token_admin);
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated method `soroban_sdk::Env::register_stellar_asset_contract`: use [Env::register_stellar_asset_contract_v2]
+  --> src/test.rs:25:29
+   |
+25 |     let token_address = env.register_stellar_asset_contract(token_admin);
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `unwrap` found for type `u64` in the current scope
+    --> src/test.rs:1257:7
+     |
+1250 | /     client.create_policy(
+1251 | |         &policyholder,
+1252 | |         &PolicyType::Weather,
+1253 | |         &1_000_000,
+...    |
+1256 | |         &String::from_str(&env, "temperature < 0"),
+1257 | |     ).unwrap();
+     | |      -^^^^^^ method not found in `u64`
+     | |______|
+     |
+
+error[E0599]: no method named `unwrap` found for type `u64` in the current scope
+    --> src/test.rs:1278:7
+     |
+1271 |       let policy_id = client.create_policy(
+     |  _____________________-
+1272 | |         &policyholder,
+1273 | |         &PolicyType::Weather,
+1274 | |         &1_000_000,
+...    |
+1277 | |         &String::from_str(&env, "temperature < 0"),
+1278 | |     ).unwrap();
+     | |      -^^^^^^ method not found in `u64`
+     | |______|
+     |
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1291:43
+     |
+1291 |     client.set_max_policies(&admin, &100).unwrap();
+     |                                           ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1302:50
+     |
+1302 |     client.set_max_policies(&policyholder, &100).unwrap();
+     |                                                  ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1312:41
+     |
+1312 |     client.set_max_policies(&admin, &2).unwrap();
+     |                                         ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for type `u64` in the current scope
+    --> src/test.rs:1324:7
+     |
+1317 | /     client.create_policy(
+1318 | |         &policyholder,
+1319 | |         &PolicyType::Weather,
+1320 | |         &1_000_000,
+...    |
+1323 | |         &String::from_str(&env, "condition1"),
+1324 | |     ).unwrap();
+     | |      -^^^^^^ method not found in `u64`
+     | |______|
+     |
+
+error[E0599]: no method named `unwrap` found for type `u64` in the current scope
+    --> src/test.rs:1333:7
+     |
+1326 | /     client.create_policy(
+1327 | |         &policyholder,
+1328 | |         &PolicyType::Weather,
+1329 | |         &1_000_000,
+...    |
+1332 | |         &String::from_str(&env, "condition2"),
+1333 | |     ).unwrap();
+     | |      -^^^^^^ method not found in `u64`
+     | |______|
+     |
+
+error[E0599]: no method named `unwrap` found for type `u64` in the current scope
+    --> src/test.rs:1343:7
+     |
+1336 | /     client.create_policy(
+1337 | |         &policyholder,
+1338 | |         &PolicyType::Weather,
+1339 | |         &1_000_000,
+...    |
+1342 | |         &String::from_str(&env, "condition3"),
+1343 | |     ).unwrap();
+     | |      -^^^^^^ method not found in `u64`
+     | |______|
+     |
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1353:45
+     |
+1353 |     client.set_reserve_ratio(&admin, &3000).unwrap(); // 30%
+     |                                             ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1364:52
+     |
+1364 |     client.set_reserve_ratio(&provider_one, &3000).unwrap();
+     |                                                    ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1374:45
+     |
+1374 |     client.set_reserve_ratio(&admin, &5000).unwrap();
+     |                                             ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1377:53
+     |
+1377 |     client.add_liquidity(&provider_one, &1_000_000).unwrap();
+     |                                                     ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1381:56
+     |
+1381 |     client.withdraw_liquidity(&provider_one, &600_000).unwrap();
+     |                                                        ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1390:45
+     |
+1390 |     client.set_reserve_ratio(&admin, &2000).unwrap();
+     |                                             ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1393:53
+     |
+1393 |     client.add_liquidity(&provider_one, &1_000_000).unwrap();
+     |                                                     ^^^^^^ method not found in `()`
+
+error[E0599]: no method named `unwrap` found for unit type `()` in the current scope
+    --> src/test.rs:1396:56
+     |
+1396 |     client.withdraw_liquidity(&provider_one, &700_000).unwrap();
+     |                                                        ^^^^^^ method not found in `()`
+
+For more information about this error, try `rustc --explain E0599`.
+warning: `stellarinsure` (lib test) generated 2 warnings
+error: could not compile `stellarinsure` (lib test) due to 16 previous errors; 2 warnings emitted

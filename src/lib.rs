@@ -164,6 +164,7 @@ impl StellarInsure {
             trigger_condition,
             status: PolicyStatus::Active,
             claim_amount: 0,
+            total_claimed: 0,
         };
 
         storage::set_policy(&env, policy_id, &policy);
@@ -256,7 +257,7 @@ impl StellarInsure {
 
         policy.policyholder.require_auth();
 
-        if claim_amount > policy.coverage_amount {
+        if claim_amount > policy.remaining_coverage() {
             return Err(Error::ClaimExceedsCoverage);
         }
 
@@ -311,8 +312,14 @@ impl StellarInsure {
         }
 
         if approved {
-            policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;
+            policy.total_claimed += claim.claim_amount;
+            if policy.total_claimed >= policy.coverage_amount {
+                policy.status = PolicyStatus::ClaimApproved;
+            } else {
+                policy.status = PolicyStatus::Active;
+            }
+            policy.claim_amount = 0;
 
             if let Some(risk_pool_addr) = storage::get_risk_pool(&env) {
                 let risk_pool_client = RiskPoolClient::new(&env, &risk_pool_addr);
@@ -342,7 +349,7 @@ impl StellarInsure {
                 },
             );
         } else {
-            policy.status = PolicyStatus::ClaimRejected;
+            policy.status = PolicyStatus::Active;
             policy.claim_amount = 0;
         }
 
@@ -787,8 +794,16 @@ impl StellarInsure {
         // Auto-finalise when threshold is reached
         if multisig::threshold_reached(&env, approval_count) {
             let mut claim = storage::get_claim(&env, policy_id)?;
-            policy.status = PolicyStatus::ClaimApproved;
+            
             claim.approved = true;
+            policy.total_claimed += claim.claim_amount;
+            if policy.total_claimed >= policy.coverage_amount {
+                policy.status = PolicyStatus::ClaimApproved;
+            } else {
+                policy.status = PolicyStatus::Active;
+            }
+            policy.claim_amount = 0;
+
             let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
             let token_client = TokenClient::new(&env, &token_address);
 
@@ -821,12 +836,12 @@ impl StellarInsure {
                     policyholder: policy.policyholder,
                     claim_amount: claim.claim_amount,
                     approved: true,
-                    status: PolicyStatus::ClaimApproved,
+                    status: policy.status.clone(),
                 },
             );
         } else if multisig::rejection_forced(&env, rejection_count) {
             let claim = storage::get_claim(&env, policy_id)?;
-            policy.status = PolicyStatus::ClaimRejected;
+            policy.status = PolicyStatus::Active;
             policy.claim_amount = 0;
             storage::set_policy(&env, policy_id, &policy);
             storage::clear_claim_votes(&env, policy_id);
@@ -837,7 +852,7 @@ impl StellarInsure {
                     policyholder: policy.policyholder,
                     claim_amount: claim.claim_amount,
                     approved: false,
-                    status: PolicyStatus::ClaimRejected,
+                    status: PolicyStatus::Active,
                 },
             );
         }
