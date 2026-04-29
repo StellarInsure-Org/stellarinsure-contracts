@@ -41,4 +41,7 @@ pub enum Error {
     MaxPoliciesReached = 29,
     // Issue #202 — risk pool withdrawal protection
     InsufficientPoolReserve = 30,
+    // Issue #198 — oracle integration
+    OracleNotRegistered = 31,
+    OracleConditionNotMet = 32,
 }
