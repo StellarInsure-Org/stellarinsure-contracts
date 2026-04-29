@@ -2,33 +2,104 @@ use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
 use crate::{Claim, ClaimVotes, Error, Policy, PoolStats, ProviderPosition, Providers};
 
+/// Enumeration of all persistent and instance storage keys used by the contract.
+///
+/// Storage tiers:
+/// - **Instance** (`env.storage().instance()`): shared across all invocations of the
+///   contract instance; suitable for small, frequently-read values (admin, counters,
+///   global flags).
+/// - **Persistent** (`env.storage().persistent()`): per-key TTL-extended storage;
+///   used for per-policy, per-claim, and per-provider data that must survive ledger
+///   expiry extensions.
 #[contracttype]
 enum DataKey {
+    /// The primary administrator address. Used for privileged operations before
+    /// multi-sig support was added; kept for legacy fallback in `is_admin`.
     Admin,
+
+    /// Monotonically increasing counter that tracks the total number of policies
+    /// ever created. Used to assign unique policy IDs.
     PolicyCounter,
+
+    /// Per-policy storage keyed by the policy's numeric ID.
     Policy(u64),
+
+    /// Per-claim storage keyed by the associated policy ID.
+    /// Each policy may have at most one active claim record.
     Claim(u64),
+
+    /// The Stellar token contract address used for premium payments and claim payouts.
+    /// Must be set by the admin via `set_premium_token` before policies can be created.
     PremiumToken,
+
+    /// Administrator address for the risk pool contract.
+    /// Authorised to call liquidity management functions on the pool.
     RiskPoolAdmin,
+
+    /// Aggregate XLM (or token) liquidity currently held in the risk pool.
+    /// Updated on every deposit and withdrawal.
     TotalLiquidity,
+
+    /// Cumulative yield (premiums) distributed to liquidity providers since
+    /// the contract was initialised.
     TotalYieldDistributed,
+
+    /// Per-provider liquidity position keyed by the provider's `Address`.
     Provider(Address),
+
+    /// Ordered list of all registered liquidity provider addresses.
+    /// Maintained alongside individual `Provider` entries so the pool can
+    /// iterate over providers when distributing yield.
     Providers,
+
+    /// Global pause flag. When `true`, policy creation and claim submission
+    /// are blocked. Set by the admin via `pause` / `unpause`.
     Paused,
+
     // Issue #16 — multi-sig
+    /// List of addresses that collectively form the multi-sig admin set.
+    /// Any address in this list may perform admin-gated operations.
     Admins,
+
+    /// Minimum number of admin approvals required to execute a multi-sig action.
     Threshold,
+
+    /// Accumulated approval/rejection votes for a pending claim, keyed by policy ID.
+    /// Cleared once the claim reaches the required threshold.
     ClaimVotes(u64),
+
+    /// Contract schema version. Incremented on breaking storage migrations so
+    /// upgrade logic can detect and apply the correct migration path.
     Version,
+
+    /// Cumulative total of all premiums collected by the protocol since deployment.
     TotalPremium,
+
+    /// Cumulative total of all claim payouts disbursed by the protocol since deployment.
     TotalPayouts,
+
+    /// Address of the external risk pool contract that holds liquidity and
+    /// executes payouts on behalf of the main insurance contract.
     RiskPool,
+
     // Issue #199 — max policies
+    /// Hard cap on the number of policies that may exist simultaneously.
+    /// Defaults to `MAX_POLICIES` (1 000 000) and can be adjusted by the admin.
     MaxPolicies,
+
     // Issue #202 — reserve ratio
+    /// Minimum reserve ratio expressed in basis points (e.g. 2000 = 20 %).
+    /// The pool must maintain at least this fraction of total liquidity as
+    /// unencumbered reserves before a payout can be approved.
     ReserveRatio,
+
     // Issue #198 — oracle integration
+    /// Oracle contract address for a specific oracle type, keyed by a `Symbol`
+    /// identifier (e.g. `"weather"`, `"flight"`).
     OracleAddress(Symbol),
+
+    /// Ordered list of all oracle type `Symbol`s that have been registered.
+    /// Used to enumerate active oracles without requiring off-chain indexing.
     OracleAddresses,
 }
 
