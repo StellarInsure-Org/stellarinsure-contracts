@@ -274,3 +274,38 @@ pub struct BeneficiaryChangedEvent {
     pub old_beneficiary: Address,
     pub new_beneficiary: Address,
 }
+
+// ── Issue #198 — Oracle integration types ────────────────────────────────────
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OracleRegisteredEvent {
+    pub oracle_type: Symbol,
+    pub oracle_address: Address,
+    pub admin: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OracleRemovedEvent {
+    pub oracle_type: Symbol,
+    pub admin: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OracleTriggerEvaluatedEvent {
+    pub policy_id: u64,
+    pub oracle_type: Symbol,
+    pub condition_met: bool,
+    pub details: String,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AutomaticClaimTriggeredEvent {
+    pub policy_id: u64,
+    pub policyholder: Address,
+    pub oracle_type: Symbol,
+    pub claim_amount: i128,
+}

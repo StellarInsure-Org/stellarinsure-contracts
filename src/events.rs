@@ -1,11 +1,12 @@
 use soroban_sdk::{symbol_short, Env};
 
 use crate::{
-    AdminAddedEvent, AdminRemovedEvent, BeneficiaryChangedEvent, ClaimProcessedEvent,
-    ClaimSubmittedEvent, ClaimVoteCastEvent, ContractPausedEvent, ContractUnpausedEvent,
-    PayoutEvent, PolicyCancelledEvent, PolicyCreatedEvent, PolicyExpiredEvent,
-    PolicyExtendedEvent, PolicyModifiedCoverageEvent, PolicyRenewedEvent, PremiumPaidEvent,
-    RiskPoolSetEvent, ThresholdUpdatedEvent,
+    AdminAddedEvent, AdminRemovedEvent, AutomaticClaimTriggeredEvent, BeneficiaryChangedEvent,
+    ClaimProcessedEvent, ClaimSubmittedEvent, ClaimVoteCastEvent, ContractPausedEvent,
+    ContractUnpausedEvent, OracleRegisteredEvent, OracleRemovedEvent,
+    OracleTriggerEvaluatedEvent, PayoutEvent, PolicyCancelledEvent, PolicyCreatedEvent,
+    PolicyExpiredEvent, PolicyExtendedEvent, PolicyModifiedCoverageEvent, PolicyRenewedEvent,
+    PremiumPaidEvent, RiskPoolSetEvent, ThresholdUpdatedEvent,
 };
 
 pub fn publish_policy_created(env: &Env, event: &PolicyCreatedEvent) {
@@ -136,6 +137,35 @@ pub fn publish_duration_extended(env: &Env, event: &PolicyExtendedEvent) {
 pub fn publish_beneficiary_changed(env: &Env, event: &BeneficiaryChangedEvent) {
     env.events().publish(
         (symbol_short!("policy"), symbol_short!("benefic")),
+        event.clone(),
+    );
+}
+// ── Issue #198 — Oracle integration events ───────────────────────────────────
+
+pub fn publish_oracle_registered(env: &Env, event: &OracleRegisteredEvent) {
+    env.events().publish(
+        (symbol_short!("oracle"), symbol_short!("register")),
+        event.clone(),
+    );
+}
+
+pub fn publish_oracle_removed(env: &Env, event: &OracleRemovedEvent) {
+    env.events().publish(
+        (symbol_short!("oracle"), symbol_short!("removed")),
+        event.clone(),
+    );
+}
+
+pub fn publish_oracle_trigger_evaluated(env: &Env, event: &OracleTriggerEvaluatedEvent) {
+    env.events().publish(
+        (symbol_short!("oracle"), symbol_short!("eval")),
+        event.clone(),
+    );
+}
+
+pub fn publish_automatic_claim_triggered(env: &Env, event: &AutomaticClaimTriggeredEvent) {
+    env.events().publish(
+        (symbol_short!("claim"), symbol_short!("auto")),
         event.clone(),
     );
 }

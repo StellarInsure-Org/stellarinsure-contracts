@@ -39,6 +39,7 @@ fn expire_policy_if_needed(env: &Env, policy: &mut Policy, policy_id: u64) {
 }
 
 pub use error::Error;
+pub use oracle::{OracleError, OracleProvider, OracleResult};
 pub use risk_pool::{RiskPool, RiskPoolClient};
 pub use types::*;
 
@@ -374,11 +375,202 @@ impl StellarInsure {
         } else if oracle_type == symbol_short!("Flight") {
             oracle::FlightOracle::verify_condition(&env, parameter)
                 .map_err(|_| Error::OracleVerificationFailed)?
+        } else if oracle_type == symbol_short!("Price") {
+            oracle::PriceOracle::verify_condition(&env, parameter)
+                .map_err(|_| Error::OracleVerificationFailed)?
         } else {
             oracle::SmartContractOracle::verify_condition(&env, parameter)
                 .map_err(|_| Error::OracleVerificationFailed)?
         };
         Ok(result)
+    }
+
+    // ── Issue #198 — Oracle integration functions ────────────────────────────
+
+    /// Register an oracle address for automatic claim triggering (admin only)
+    pub fn register_oracle(
+        env: Env,
+        admin: Address,
+        oracle_type: Symbol,
+        oracle_address: Address,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        storage::set_oracle_address(&env, &oracle_type, &oracle_address);
+        
+        events::publish_oracle_registered(
+            &env,
+            &OracleRegisteredEvent {
+                oracle_type,
+                oracle_address,
+                admin,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Update an existing oracle address (admin only)
+    pub fn update_oracle(
+        env: Env,
+        admin: Address,
+        oracle_type: Symbol,
+        oracle_address: Address,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        if storage::get_oracle_address(&env, &oracle_type).is_none() {
+            return Err(Error::OracleNotRegistered);
+        }
+
+        storage::set_oracle_address(&env, &oracle_type, &oracle_address);
+        
+        events::publish_oracle_registered(
+            &env,
+            &OracleRegisteredEvent {
+                oracle_type,
+                oracle_address,
+                admin,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Remove an oracle address (admin only)
+    pub fn remove_oracle(
+        env: Env,
+        admin: Address,
+        oracle_type: Symbol,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        if storage::get_oracle_address(&env, &oracle_type).is_none() {
+            return Err(Error::OracleNotRegistered);
+        }
+
+        storage::remove_oracle_address(&env, &oracle_type);
+        
+        events::publish_oracle_removed(
+            &env,
+            &OracleRemovedEvent {
+                oracle_type,
+                admin,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Get the registered oracle address for a specific type
+    pub fn get_oracle(env: Env, oracle_type: Symbol) -> Option<Address> {
+        storage::get_oracle_address(&env, &oracle_type)
+    }
+
+    /// Get all registered oracle types
+    pub fn get_oracle_types(env: Env) -> Vec<Symbol> {
+        storage::get_oracle_types(&env)
+    }
+
+    /// Evaluate trigger condition against oracle data and automatically approve claim if met
+    pub fn evaluate_oracle_trigger(
+        env: Env,
+        policy_id: u64,
+        oracle_type: Symbol,
+        parameter: Symbol,
+    ) -> Result<(), Error> {
+        if storage::is_paused(&env) {
+            return Err(Error::ContractPaused);
+        }
+
+        let mut policy = storage::get_policy(&env, policy_id)?;
+
+        if policy.status != PolicyStatus::ClaimPending {
+            return Err(Error::NoPendingClaim);
+        }
+
+        // Verify oracle is registered
+        if storage::get_oracle_address(&env, &oracle_type).is_none() {
+            return Err(Error::OracleNotRegistered);
+        }
+
+        // Evaluate condition using oracle
+        let oracle_result = Self::verify_oracle_condition(env.clone(), oracle_type.clone(), parameter)?;
+
+        events::publish_oracle_trigger_evaluated(
+            &env,
+            &OracleTriggerEvaluatedEvent {
+                policy_id,
+                oracle_type: oracle_type.clone(),
+                condition_met: oracle_result.is_verified,
+                details: oracle_result.details.clone(),
+            },
+        );
+
+        // Automatically approve claim if condition is met
+        if oracle_result.is_verified {
+            let mut claim = storage::get_claim(&env, policy_id)?;
+            policy.status = PolicyStatus::ClaimApproved;
+            claim.approved = true;
+
+            // Process payout
+            if let Some(risk_pool_addr) = storage::get_risk_pool(&env) {
+                let risk_pool_client = RiskPoolClient::new(&env, &risk_pool_addr);
+                risk_pool_client.fund_payout(&policy.policyholder, &claim.claim_amount);
+            } else {
+                let token_address = storage::get_premium_token(&env).ok_or(Error::NotInitialized)?;
+                let token_client = TokenClient::new(&env, &token_address);
+
+                let contract_address = env.current_contract_address();
+                let current_balance = token_client.balance(&contract_address);
+                if current_balance < claim.claim_amount {
+                    return Err(Error::InsufficientContractBalance);
+                }
+
+                token_client.transfer(&contract_address, &policy.policyholder, &claim.claim_amount);
+            }
+
+            let total_payouts = storage::get_total_payouts(&env);
+            storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
+
+            storage::set_policy(&env, policy_id, &policy);
+            storage::set_claim(&env, policy_id, &claim);
+
+            events::publish_automatic_claim_triggered(
+                &env,
+                &AutomaticClaimTriggeredEvent {
+                    policy_id,
+                    policyholder: policy.policyholder.clone(),
+                    oracle_type,
+                    claim_amount: claim.claim_amount,
+                },
+            );
+
+            events::publish_payout(
+                &env,
+                &PayoutEvent {
+                    policy_id,
+                    policyholder: policy.policyholder,
+                    amount: claim.claim_amount,
+                },
+            );
+        } else {
+            return Err(Error::OracleConditionNotMet);
+        }
+
+        Ok(())
     }
 
     /// Cancel a policy

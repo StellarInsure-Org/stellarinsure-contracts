@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Env, Vec};
+use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
 use crate::{Claim, ClaimVotes, Error, Policy, PoolStats, ProviderPosition, Providers};
 
@@ -27,6 +27,9 @@ enum DataKey {
     MaxPolicies,
     // Issue #202 — reserve ratio
     ReserveRatio,
+    // Issue #198 — oracle integration
+    OracleAddress(Symbol),
+    OracleAddresses,
 }
 
 pub fn get_version(env: &Env) -> u32 {
@@ -361,4 +364,63 @@ pub fn get_reserve_ratio(env: &Env) -> u32 {
         .instance()
         .get(&DataKey::ReserveRatio)
         .unwrap_or(2000)
+}
+
+// ── Issue #198 — Oracle integration storage ──────────────────────────────────
+
+/// Register an oracle address for a specific oracle type
+pub fn set_oracle_address(env: &Env, oracle_type: &Symbol, oracle_address: &Address) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::OracleAddress(oracle_type.clone()), oracle_address);
+    
+    // Track all registered oracle types
+    let mut oracle_types = get_oracle_types(env);
+    let mut already_exists = false;
+    for existing_type in oracle_types.iter() {
+        if existing_type == *oracle_type {
+            already_exists = true;
+            break;
+        }
+    }
+    if !already_exists {
+        oracle_types.push_back(oracle_type.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::OracleAddresses, &oracle_types);
+    }
+}
+
+/// Get the registered oracle address for a specific type
+pub fn get_oracle_address(env: &Env, oracle_type: &Symbol) -> Option<Address> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::OracleAddress(oracle_type.clone()))
+}
+
+/// Get all registered oracle types
+pub fn get_oracle_types(env: &Env) -> Vec<Symbol> {
+    env.storage()
+        .persistent()
+        .get(&DataKey::OracleAddresses)
+        .unwrap_or(Vec::new(env))
+}
+
+/// Remove an oracle address registration
+pub fn remove_oracle_address(env: &Env, oracle_type: &Symbol) {
+    env.storage()
+        .persistent()
+        .remove(&DataKey::OracleAddress(oracle_type.clone()));
+    
+    // Remove from oracle types list
+    let oracle_types = get_oracle_types(env);
+    let mut filtered = Vec::new(env);
+    for existing_type in oracle_types.iter() {
+        if existing_type != *oracle_type {
+            filtered.push_back(existing_type);
+        }
+    }
+    env.storage()
+        .persistent()
+        .set(&DataKey::OracleAddresses, &filtered);
 }
