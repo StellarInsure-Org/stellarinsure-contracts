@@ -481,7 +481,7 @@ fn test_init_creates_admin_list_with_threshold_one() {
 
     let admins = client.get_admins();
     assert_eq!(admins.len(), 1);
-    assert_eq!(admins.get(0), admin);
+    assert_eq!(admins.get(0).unwrap(), admin);
     assert_eq!(client.get_threshold(), 1);
 }
 

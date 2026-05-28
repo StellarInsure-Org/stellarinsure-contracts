@@ -14,6 +14,8 @@ mod types;
 mod fuzz_tests;
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod integration_test;
 
 use soroban_sdk::{
     contract, contractimpl, symbol_short, token::TokenClient, Address, Env, String, Symbol, Vec,
@@ -39,7 +41,7 @@ fn expire_policy_if_needed(env: &Env, policy: &mut Policy, policy_id: u64) {
 }
 
 pub use error::Error;
-pub use oracle::{OracleError, OracleProvider, OracleResult};
+pub use oracle::{OracleError, OracleResult};
 pub use risk_pool::{RiskPool, RiskPoolClient};
 pub use types::*;
 
