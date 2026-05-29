@@ -44,4 +44,5 @@ pub enum Error {
     // Issue #198 — oracle integration
     OracleNotRegistered = 31,
     OracleConditionNotMet = 32,
+    ProofTooLong = 33,
 }

@@ -268,6 +268,11 @@ impl StellarInsure {
             return Err(Error::InvalidClaimAmount);
         }
 
+        const MAX_PROOF_LEN: u32 = 256;
+        if proof.len() > MAX_PROOF_LEN {
+            return Err(Error::ProofTooLong);
+        }
+
         if env.ledger().timestamp() > policy.end_time {
             expire_policy_if_needed(&env, &mut policy, policy_id);
             return Err(Error::PolicyExpired);
