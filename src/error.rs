@@ -46,4 +46,6 @@ pub enum Error {
     OracleConditionNotMet = 32,
     ProofTooLong = 33,
     ClaimAmountOverflow = 34,
+    PremiumOverflow = 35,
+    TriggerConditionTooLong = 36,
 }

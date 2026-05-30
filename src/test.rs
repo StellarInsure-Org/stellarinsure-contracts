@@ -1578,6 +1578,108 @@ fn test_partial_claim_exceeding_remaining_coverage_is_rejected() {
     client.submit_claim(&policy_id, &100_000, &String::from_str(&env, "proof2"));
 }
 
+// ── Issue #379 — Trigger condition length check ───────────────────────────────
+
+#[test]
+fn test_create_policy_accepts_max_length_trigger_condition() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let sac = soroban_sdk::token::StellarAssetClient::new(&env, &_token);
+    sac.mint(&policyholder, &1_000_000);
+
+    // Exactly 256 characters (the limit)
+    let long_condition = "X".repeat(256);
+    let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, &long_condition),
+    );
+    assert_eq!(policy_id, 0);
+}
+
+#[test]
+#[should_panic(expected = "#36")]
+fn test_create_policy_rejects_oversized_trigger_condition() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let sac = soroban_sdk::token::StellarAssetClient::new(&env, &_token);
+    sac.mint(&policyholder, &1_000_000);
+
+    // 257 characters — exceeds the limit
+    let long_condition = "X".repeat(257);
+    let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
+    client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, &long_condition),
+    );
+}
+
+// ── Issue #382 — Checked addition for total premium ────────────────────────────
+
+#[test]
+fn test_pay_premium_updates_total_premium() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
+    // Mint enough tokens for premium
+    let sac = soroban_sdk::token::StellarAssetClient::new(&env, &_token);
+    sac.mint(&policyholder, &premium);
+
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    );
+    client.pay_premium(&policy_id, &premium);
+
+    let stats = client.get_treasury_stats();
+    assert_eq!(stats.total_premium_collected, premium);
+}
+
+#[test]
+fn test_pay_premium_updates_total_premium_correctly() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
+    let two_premiums = premium.checked_mul(2).unwrap();
+    let sac = soroban_sdk::token::StellarAssetClient::new(&env, &_token);
+    sac.mint(&policyholder, &two_premiums);
+
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    );
+    client.pay_premium(&policy_id, &premium);
+
+    let stats = client.get_treasury_stats();
+    assert_eq!(stats.total_premium_collected, premium);
+
+    // A second premium payment on the same policy also increases the total
+    client.pay_premium(&policy_id, &premium);
+
+    let stats = client.get_treasury_stats();
+    assert_eq!(stats.total_premium_collected, two_premiums);
+}
+
 // ── Issue #381 — Checked arithmetic ───────────────────────────────────────────
 
 #[test]
