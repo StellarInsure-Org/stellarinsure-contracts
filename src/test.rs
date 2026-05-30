@@ -1408,6 +1408,120 @@ fn test_default_reserve_ratio_is_20_percent() {
     assert_eq!(ratio, 2000); // 20%
 }
 
+// ── Issue #387 — Provider unregister after full withdrawal ───────────────────
+
+#[test]
+fn test_full_withdrawal_removes_provider() {
+    let (env, _contract_id, admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &_contract_id);
+
+    // Disable reserve so full withdrawal is possible
+    client.set_reserve_ratio(&admin, &0);
+
+    client.add_liquidity(&provider_one, &1_000);
+
+    // Full withdrawal — no accrued yield
+    client.withdraw_liquidity(&provider_one, &1_000);
+
+    // Provider should no longer be in the registered list
+    let stats = client.get_pool_stats();
+    assert_eq!(stats.provider_count, 0);
+
+    // Provider position should be removed entirely
+    let result = client.try_get_provider_position(&provider_one);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_partial_withdrawal_keeps_provider_registered() {
+    let (env, _contract_id, admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &_contract_id);
+
+    // Disable reserve so any withdrawal is possible
+    client.set_reserve_ratio(&admin, &0);
+
+    client.add_liquidity(&provider_one, &1_000);
+
+    // Partial withdrawal
+    client.withdraw_liquidity(&provider_one, &400);
+
+    let stats = client.get_pool_stats();
+    assert_eq!(stats.provider_count, 1);
+
+    let position = client.get_provider_position(&provider_one);
+    assert_eq!(position.contribution, 600);
+}
+
+#[test]
+fn test_full_withdrawal_with_multiple_providers_only_removes_correct_one() {
+    let (env, _contract_id, admin, provider_one, provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &_contract_id);
+
+    // Disable reserve so full withdrawal is possible
+    client.set_reserve_ratio(&admin, &0);
+
+    client.add_liquidity(&provider_one, &1_000);
+    client.add_liquidity(&provider_two, &2_000);
+
+    // Full withdrawal of provider_one
+    client.withdraw_liquidity(&provider_one, &1_000);
+
+    // Provider two should still be registered
+    let stats = client.get_pool_stats();
+    assert_eq!(stats.provider_count, 1);
+
+    let position_two = client.get_provider_position(&provider_two);
+    assert_eq!(position_two.contribution, 2_000);
+
+    // Provider one should be gone
+    let result = client.try_get_provider_position(&provider_one);
+    assert!(result.is_err());
+}
+
+#[test]
+#[should_panic]
+fn test_full_withdrawal_removes_provider_after_claiming_yield() {
+    let (env, _contract_id, admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &_contract_id);
+
+    // Disable reserve so full withdrawal is possible
+    client.set_reserve_ratio(&admin, &0);
+
+    client.add_liquidity(&provider_one, &1_000);
+    client.distribute_yield(&100);
+
+    // Claim yield so accrued_yield drops to zero
+    client.claim_yield(&provider_one);
+
+    // Now full withdrawal should remove provider (contribution=0, accrued_yield=0)
+    client.withdraw_liquidity(&provider_one, &1_000);
+
+    // Should NOT be able to get position
+    client.get_provider_position(&provider_one);
+}
+
+#[test]
+fn test_provider_retained_when_only_yield_remains() {
+    let (env, _contract_id, admin, provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &_contract_id);
+
+    // Disable reserve so full withdrawal is possible
+    client.set_reserve_ratio(&admin, &0);
+
+    client.add_liquidity(&provider_one, &1_000);
+    client.distribute_yield(&100);
+
+    // Withdraw full contribution — provider should stay because accrued_yield > 0
+    client.withdraw_liquidity(&provider_one, &1_000);
+
+    let stats = client.get_pool_stats();
+    assert_eq!(stats.provider_count, 1);
+
+    let position = client.get_provider_position(&provider_one);
+    assert_eq!(position.contribution, 0);
+    assert_eq!(position.accrued_yield, 100);
+}
+
 #[test]
 fn test_multiple_partial_claims_accumulate_correctly() {
     let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
