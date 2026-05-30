@@ -49,6 +49,7 @@ pub use types::*;
 pub struct StellarInsure;
 
 const MAX_POLICIES: u64 = 1_000_000;
+const MAX_TRIGGER_CONDITION_LEN: u32 = 256;
 
 #[contractimpl]
 impl StellarInsure {
@@ -142,6 +143,10 @@ impl StellarInsure {
             return Err(Error::InvalidDuration);
         }
 
+        if trigger_condition.len() > MAX_TRIGGER_CONDITION_LEN {
+            return Err(Error::TriggerConditionTooLong);
+        }
+
         let policy_id = storage::get_policy_counter(&env);
         let max_policies = storage::get_max_policies(&env);
         if policy_id >= max_policies {
@@ -228,7 +233,7 @@ impl StellarInsure {
         }
 
         let total_premium = storage::get_total_premium(&env);
-        storage::set_total_premium(&env, total_premium + amount);
+        storage::set_total_premium(&env, total_premium.checked_add(amount).ok_or(Error::PremiumOverflow)?);
 
         events::publish_premium_paid(
             &env,
@@ -659,7 +664,7 @@ impl StellarInsure {
         );
 
         let total_premium = storage::get_total_premium(&env);
-        storage::set_total_premium(&env, total_premium + additional_premium);
+        storage::set_total_premium(&env, total_premium.checked_add(additional_premium).ok_or(Error::PremiumOverflow)?);
 
         let old_coverage = policy.coverage_amount;
         policy.coverage_amount = new_coverage;
@@ -720,7 +725,7 @@ impl StellarInsure {
         );
 
         let total_premium = storage::get_total_premium(&env);
-        storage::set_total_premium(&env, total_premium + additional_premium);
+        storage::set_total_premium(&env, total_premium.checked_add(additional_premium).ok_or(Error::PremiumOverflow)?);
 
         let old_end_time = policy.end_time;
         policy.end_time = old_end_time + extra_seconds;
@@ -1128,7 +1133,7 @@ impl StellarInsure {
         );
 
         let total_premium = storage::get_total_premium(&env);
-        storage::set_total_premium(&env, total_premium + renewal_premium);
+        storage::set_total_premium(&env, total_premium.checked_add(renewal_premium).ok_or(Error::PremiumOverflow)?);
 
         policy.premium = renewal_premium;
         policy.end_time = new_end_time;
