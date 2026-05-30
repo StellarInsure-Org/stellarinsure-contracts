@@ -1463,3 +1463,37 @@ fn test_partial_claim_exceeding_remaining_coverage_is_rejected() {
     // Second claim attempts to take more than what's remaining (which is 50_000)
     client.submit_claim(&policy_id, &100_000, &String::from_str(&env, "proof2"));
 }
+
+// ── Issue #381 — Checked arithmetic ───────────────────────────────────────────
+
+#[test]
+fn test_vote_claim_accumulates_total_claimed_with_checked_add() {
+    let (env, contract_id, admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let second_admin = Address::generate(&env);
+    client.add_admin(&admin, &second_admin);
+    client.set_threshold(&admin, &2);
+
+    let premium = client.calculate_premium(&PolicyType::Weather, &1_000_000, &2_592_000);
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &premium,
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    );
+
+    // First claim — vote to approve
+    client.submit_claim(&policy_id, &300_000, &String::from_str(&env, "proof1"));
+    client.vote_claim(&policy_id, &admin, &true);
+    client.vote_claim(&policy_id, &second_admin, &true);
+    assert_eq!(client.get_policy(&policy_id).total_claimed, 300_000);
+
+    // Second claim — vote to approve
+    client.submit_claim(&policy_id, &200_000, &String::from_str(&env, "proof2"));
+    client.vote_claim(&policy_id, &admin, &true);
+    client.vote_claim(&policy_id, &second_admin, &true);
+    assert_eq!(client.get_policy(&policy_id).total_claimed, 500_000);
+}

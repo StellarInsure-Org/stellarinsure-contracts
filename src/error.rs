@@ -45,4 +45,5 @@ pub enum Error {
     OracleNotRegistered = 31,
     OracleConditionNotMet = 32,
     ProofTooLong = 33,
+    ClaimAmountOverflow = 34,
 }

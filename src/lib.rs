@@ -321,7 +321,7 @@ impl StellarInsure {
 
         if approved {
             claim.approved = true;
-            policy.total_claimed += claim.claim_amount;
+            policy.total_claimed = policy.total_claimed.checked_add(claim.claim_amount).ok_or(Error::ClaimAmountOverflow)?;
             if policy.total_claimed >= policy.coverage_amount {
                 policy.status = PolicyStatus::ClaimApproved;
             } else {
@@ -995,7 +995,7 @@ impl StellarInsure {
             let mut claim = storage::get_claim(&env, policy_id)?;
             
             claim.approved = true;
-            policy.total_claimed += claim.claim_amount;
+            policy.total_claimed = policy.total_claimed.checked_add(claim.claim_amount).ok_or(Error::ClaimAmountOverflow)?;
             if policy.total_claimed >= policy.coverage_amount {
                 policy.status = PolicyStatus::ClaimApproved;
             } else {
