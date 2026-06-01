@@ -1249,6 +1249,72 @@ fn test_verify_oracle_rejects_unknown_type() {
     );
 }
 
+// ── Issue #384 — Oracle trigger evaluation authorization ─────────────────────
+
+#[test]
+#[should_panic(expected = "Unauthorized")]
+fn test_evaluate_oracle_trigger_rejects_unauthorized_caller() {
+    let (env, contract_id, admin, policyholder, token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+
+    client.submit_claim(&policyholder, &policy_id, &500_000);
+
+    let unauthorized_caller = Address::generate(&env);
+    client.evaluate_oracle_trigger(
+        &unauthorized_caller,
+        &policy_id,
+        &soroban_sdk::symbol_short!("Weather"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
+}
+
+#[test]
+fn test_evaluate_oracle_trigger_authorized_admin() {
+    let (env, contract_id, admin, policyholder, token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    client.submit_claim(&policyholder, &policy_id, &500_000);
+
+    client.register_oracle(
+        &admin,
+        &soroban_sdk::symbol_short!("Weather"),
+        &admin,
+    );
+
+    client.evaluate_oracle_trigger(
+        &admin,
+        &policy_id,
+        &soroban_sdk::symbol_short!("Weather"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
+}
+
+#[test]
+fn test_evaluate_oracle_trigger_authorized_oracle_address() {
+    let (env, contract_id, admin, policyholder, token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let oracle_address = Address::generate(&env);
+    let policy_id = create_policy(&env, &client, &policyholder);
+    client.submit_claim(&policyholder, &policy_id, &500_000);
+
+    client.register_oracle(
+        &admin,
+        &soroban_sdk::symbol_short!("Weather"),
+        &oracle_address,
+    );
+
+    client.evaluate_oracle_trigger(
+        &oracle_address,
+        &policy_id,
+        &soroban_sdk::symbol_short!("Weather"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
+}
+
 // ── Tests for Issue #203: Premium verification ───────────────────────────────
 
 #[test]

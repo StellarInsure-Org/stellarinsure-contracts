@@ -508,6 +508,7 @@ impl StellarInsure {
     /// Evaluate trigger condition against oracle data and automatically approve claim if met
     pub fn evaluate_oracle_trigger(
         env: Env,
+        caller: Address,
         policy_id: u64,
         oracle_type: Symbol,
         parameter: Symbol,
@@ -516,15 +517,21 @@ impl StellarInsure {
             return Err(Error::ContractPaused);
         }
 
+        caller.require_auth();
+
         let mut policy = storage::get_policy(&env, policy_id)?;
 
         if policy.status != PolicyStatus::ClaimPending {
             return Err(Error::NoPendingClaim);
         }
 
-        // Verify oracle is registered
-        if storage::get_oracle_address(&env, &oracle_type).is_none() {
-            return Err(Error::OracleNotRegistered);
+        // Verify oracle is registered and caller is authorized
+        let oracle_address = storage::get_oracle_address(&env, &oracle_type)
+            .ok_or(Error::OracleNotRegistered)?;
+        let admin = storage::get_admin(&env);
+
+        if caller != oracle_address && caller != admin {
+            return Err(Error::Unauthorized);
         }
 
         // Evaluate condition using oracle
