@@ -101,6 +101,12 @@ enum DataKey {
     /// Ordered list of all oracle type `Symbol`s that have been registered.
     /// Used to enumerate active oracles without requiring off-chain indexing.
     OracleAddresses,
+
+    // Issue #438 — oracle quorum threshold
+    /// Minimum number of oracle confirmations required before a price-dependent
+    /// action (e.g. automatic claim approval) is executed.
+    /// Must be >= 1 and <= the number of registered oracles.
+    OracleQuorumThreshold,
 }
 
 pub fn get_version(env: &Env) -> u32 {
@@ -475,6 +481,24 @@ pub fn get_oracle_types(env: &Env) -> Vec<Symbol> {
         .persistent()
         .get(&DataKey::OracleAddresses)
         .unwrap_or(Vec::new(env))
+}
+
+// ── Issue #438 — Oracle quorum threshold ─────────────────────────────────────
+
+/// Set the minimum number of oracle confirmations required for price-dependent actions.
+/// `threshold` must be >= 1.
+pub fn set_oracle_quorum_threshold(env: &Env, threshold: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::OracleQuorumThreshold, &threshold);
+}
+
+/// Get the oracle quorum threshold. Defaults to 1 if not explicitly set.
+pub fn get_oracle_quorum_threshold(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::OracleQuorumThreshold)
+        .unwrap_or(1)
 }
 
 /// Remove an oracle address registration

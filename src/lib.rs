@@ -63,6 +63,8 @@ impl StellarInsure {
         storage::set_threshold(&env, 1);
         storage::set_policy_counter(&env, 0);
         storage::set_max_policies(&env, MAX_POLICIES);
+        // Default oracle quorum: at least 1 oracle must confirm
+        storage::set_oracle_quorum_threshold(&env, 1);
     }
 
     /// Set the maximum number of policies allowed (admin only)
@@ -503,7 +505,30 @@ impl StellarInsure {
         storage::get_oracle_types(&env)
     }
 
-    /// Evaluate trigger condition against oracle data and automatically approve claim if met
+    // ── Issue #438 — Oracle quorum threshold ─────────────────────────────────
+
+    /// Set the minimum number of oracle confirmations required before
+    /// price-dependent actions execute. Must be >= 1. Admin only.
+    pub fn set_oracle_quorum_threshold(env: Env, admin: Address, threshold: u32) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        if threshold == 0 {
+            return Err(Error::InvalidQuorumThreshold);
+        }
+        storage::set_oracle_quorum_threshold(&env, threshold);
+        Ok(())
+    }
+
+    /// Get the current oracle quorum threshold.
+    pub fn get_oracle_quorum_threshold(env: Env) -> u32 {
+        storage::get_oracle_quorum_threshold(&env)
+    }
+
+    /// Evaluate trigger condition against oracle data and automatically approve claim if met.
+    /// Requires at least `oracle_quorum_threshold` registered oracles to confirm the condition.
     pub fn evaluate_oracle_trigger(
         env: Env,
         policy_id: u64,
@@ -525,7 +550,24 @@ impl StellarInsure {
             return Err(Error::OracleNotRegistered);
         }
 
-        // Evaluate condition using oracle
+        // Enforce quorum: count how many registered oracle types confirm the condition
+        let quorum_threshold = storage::get_oracle_quorum_threshold(&env);
+        let oracle_types = storage::get_oracle_types(&env);
+        let mut confirmations: u32 = 0;
+        for ot in oracle_types.iter() {
+            if storage::get_oracle_address(&env, &ot).is_some() {
+                let result = Self::verify_oracle_condition(env.clone(), ot, parameter.clone());
+                if let Ok(r) = result {
+                    if r.is_verified {
+                        confirmations += 1;
+                    }
+                }
+            }
+        }
+
+        let condition_met = confirmations >= quorum_threshold;
+
+        // Evaluate the primary oracle for event details
         let oracle_result = Self::verify_oracle_condition(env.clone(), oracle_type.clone(), parameter)?;
 
         events::publish_oracle_trigger_evaluated(
@@ -533,13 +575,13 @@ impl StellarInsure {
             &OracleTriggerEvaluatedEvent {
                 policy_id,
                 oracle_type: oracle_type.clone(),
-                condition_met: oracle_result.is_verified,
+                condition_met,
                 details: oracle_result.details.clone(),
             },
         );
 
-        // Automatically approve claim if condition is met
-        if oracle_result.is_verified {
+        // Automatically approve claim only if quorum is reached
+        if condition_met {
             let mut claim = storage::get_claim(&env, policy_id)?;
             policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;
