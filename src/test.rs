@@ -1713,3 +1713,59 @@ fn test_vote_claim_accumulates_total_claimed_with_checked_add() {
     client.vote_claim(&policy_id, &second_admin, &true);
     assert_eq!(client.get_policy(&policy_id).total_claimed, 500_000);
 }
+
+#[test]
+fn test_oracle_price_freshness_window_stale_rejection() {
+    let (env, contract_id, admin, _policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    
+    // Set ledger timestamp to a baseline value to avoid subtraction underflow
+    env.ledger().with_mut(|l| {
+        l.timestamp = 100_000;
+    });
+    
+    // Set freshness window to 3600 seconds (1 hour)
+    client.set_price_freshness_window(&admin, &3600);
+    assert_eq!(client.get_price_freshness_window(), 3600);
+    
+    // Set a price timestamp that is 2 hours old
+    let current_time = env.ledger().timestamp();
+    client.update_price_feed(&100, &(current_time - 7200));
+    
+    // Verify contract is paused now (circuit breaker triggered on stale update)
+    assert!(client.get_paused());
+}
+
+#[test]
+fn test_get_policy_implicitly_expires_stale_policy() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    
+    env.ledger().with_mut(|l| {
+        l.timestamp = 100_000;
+    });
+    
+    let correct_premium = client.calculate_premium(
+        &PolicyType::Weather,
+        &1_000_000,
+        &2_592_000,
+    );
+    
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &correct_premium,
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    );
+    
+    // Fast forward ledger beyond policy end time
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+    
+    // Read the policy; it should report status as Expired
+    let policy = client.get_policy(&policy_id);
+    assert_eq!(policy.status, PolicyStatus::Expired);
+}
