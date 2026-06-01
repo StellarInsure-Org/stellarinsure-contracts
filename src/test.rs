@@ -1224,11 +1224,29 @@ fn test_verify_oracle_stubs() {
     );
     assert!(res_flight.is_verified);
 
-    let res_contract = client.verify_oracle_condition(
-        &soroban_sdk::symbol_short!("Contract"),
+    let res_price = client.verify_oracle_condition(
+        &soroban_sdk::symbol_short!("Price"),
         &soroban_sdk::symbol_short!("MockParam"),
     );
-    assert!(res_contract.is_verified);
+    assert!(res_price.is_verified);
+
+    let res_smart_contract = client.verify_oracle_condition(
+        &soroban_sdk::symbol_short!("SmartContract"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
+    assert!(res_smart_contract.is_verified);
+}
+
+#[test]
+#[should_panic(expected = "OracleVerificationFailed")]
+fn test_verify_oracle_rejects_unknown_type() {
+    let (env, contract_id, _admin, _policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    client.verify_oracle_condition(
+        &soroban_sdk::symbol_short!("UnknownOracle"),
+        &soroban_sdk::symbol_short!("MockParam"),
+    );
 }
 
 // ── Tests for Issue #203: Premium verification ───────────────────────────────

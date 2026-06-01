@@ -397,9 +397,11 @@ impl StellarInsure {
         } else if oracle_type == symbol_short!("Price") {
             oracle::PriceOracle::verify_condition(&env, parameter)
                 .map_err(|_| Error::OracleVerificationFailed)?
-        } else {
+        } else if oracle_type == symbol_short!("SmartContract") {
             oracle::SmartContractOracle::verify_condition(&env, parameter)
                 .map_err(|_| Error::OracleVerificationFailed)?
+        } else {
+            return Err(Error::OracleVerificationFailed);
         };
         Ok(result)
     }
