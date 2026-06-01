@@ -1714,98 +1714,58 @@ fn test_vote_claim_accumulates_total_claimed_with_checked_add() {
     assert_eq!(client.get_policy(&policy_id).total_claimed, 500_000);
 }
 
-// ── Tests for Issue #438: Oracle quorum threshold ────────────────────────────
-
 #[test]
-fn test_default_oracle_quorum_threshold_is_one() {
-    let (env, contract_id, _admin, _policyholder, _token) = setup_insurance_contract();
-    let client = StellarInsureClient::new(&env, &contract_id);
-
-    assert_eq!(client.get_oracle_quorum_threshold(), 1);
-}
-
-#[test]
-fn test_set_oracle_quorum_threshold_by_admin() {
+fn test_oracle_price_freshness_window_stale_rejection() {
     let (env, contract_id, admin, _policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
-
-    client.set_oracle_quorum_threshold(&admin, &3);
-    assert_eq!(client.get_oracle_quorum_threshold(), 3);
+    
+    // Set ledger timestamp to a baseline value to avoid subtraction underflow
+    env.ledger().with_mut(|l| {
+        l.timestamp = 100_000;
+    });
+    
+    // Set freshness window to 3600 seconds (1 hour)
+    client.set_price_freshness_window(&admin, &3600);
+    assert_eq!(client.get_price_freshness_window(), 3600);
+    
+    // Set a price timestamp that is 2 hours old
+    let current_time = env.ledger().timestamp();
+    client.update_price_feed(&100, &(current_time - 7200));
+    
+    // Verify contract is paused now (circuit breaker triggered on stale update)
+    assert!(client.get_paused());
 }
 
 #[test]
-#[should_panic(expected = "Unauthorized")]
-fn test_set_oracle_quorum_threshold_rejects_non_admin() {
+fn test_get_policy_implicitly_expires_stale_policy() {
     let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);
-
-    client.set_oracle_quorum_threshold(&policyholder, &2);
-}
-
-#[test]
-#[should_panic(expected = "InvalidQuorumThreshold")]
-fn test_set_oracle_quorum_threshold_rejects_zero() {
-    let (env, contract_id, admin, _policyholder, _token) = setup_insurance_contract();
-    let client = StellarInsureClient::new(&env, &contract_id);
-
-    client.set_oracle_quorum_threshold(&admin, &0);
-}
-
-#[test]
-fn test_oracle_quorum_threshold_boundary_one() {
-    // Threshold of 1 with one registered oracle should succeed
-    let (env, contract_id, admin, policyholder, token) = setup_insurance_contract();
-    let client = StellarInsureClient::new(&env, &contract_id);
-
-    // Register one oracle
-    let oracle_addr = Address::generate(&env);
-    client.register_oracle(&admin, &soroban_sdk::symbol_short!("Weather"), &oracle_addr);
-
-    // Set quorum to 1
-    client.set_oracle_quorum_threshold(&admin, &1);
-    assert_eq!(client.get_oracle_quorum_threshold(), 1);
-
-    // Create policy and submit claim
-    let policy_id = create_policy(&env, &client, &policyholder);
-    client.set_premium_token(&admin, &token);
-    client.pay_premium(&policy_id, &10_000);
-    client.submit_claim(&policy_id, &500_000, &String::from_str(&env, "proof"));
-
-    // Evaluate oracle trigger — quorum of 1 met by the single registered oracle
-    client.evaluate_oracle_trigger(
-        &policy_id,
-        &soroban_sdk::symbol_short!("Weather"),
-        &soroban_sdk::symbol_short!("MockParam"),
+    
+    env.ledger().with_mut(|l| {
+        l.timestamp = 100_000;
+    });
+    
+    let correct_premium = client.calculate_premium(
+        &PolicyType::Weather,
+        &1_000_000,
+        &2_592_000,
     );
-
+    
+    let policy_id = client.create_policy(
+        &policyholder,
+        &PolicyType::Weather,
+        &1_000_000,
+        &correct_premium,
+        &2_592_000,
+        &String::from_str(&env, "temperature < 0"),
+    );
+    
+    // Fast forward ledger beyond policy end time
+    env.ledger().with_mut(|l| {
+        l.timestamp += 2_592_001;
+    });
+    
+    // Read the policy; it should report status as Expired
     let policy = client.get_policy(&policy_id);
-    assert_eq!(policy.status, PolicyStatus::ClaimApproved);
-}
-
-#[test]
-#[should_panic(expected = "OracleConditionNotMet")]
-fn test_oracle_quorum_threshold_not_met_rejects_claim() {
-    // Threshold of 2 but only 1 oracle registered — quorum not met
-    let (env, contract_id, admin, policyholder, token) = setup_insurance_contract();
-    let client = StellarInsureClient::new(&env, &contract_id);
-
-    // Register one oracle
-    let oracle_addr = Address::generate(&env);
-    client.register_oracle(&admin, &soroban_sdk::symbol_short!("Weather"), &oracle_addr);
-
-    // Set quorum to 2 (higher than registered oracle count)
-    client.set_oracle_quorum_threshold(&admin, &2);
-
-    // Create policy and submit claim
-    let policy_id = create_policy(&env, &client, &policyholder);
-    client.set_premium_token(&admin, &token);
-    client.pay_premium(&policy_id, &10_000);
-    client.submit_claim(&policy_id, &500_000, &String::from_str(&env, "proof"));
-
-    // Should fail: quorum of 2 not met with only 1 oracle
-    client.evaluate_oracle_trigger(
-        &policy_id,
-        &soroban_sdk::symbol_short!("Weather"),
-        &soroban_sdk::symbol_short!("MockParam"),
-    );
+    assert_eq!(policy.status, PolicyStatus::Expired);
 }

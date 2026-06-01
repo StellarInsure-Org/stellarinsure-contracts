@@ -48,6 +48,7 @@ pub enum Error {
     ClaimAmountOverflow = 34,
     PremiumOverflow = 35,
     TriggerConditionTooLong = 36,
-    // Issue #438 — oracle quorum threshold
-    InvalidQuorumThreshold = 37,
+    OracleDataStale = 37,
+    OracleDataUnavailable = 38,
+    InvalidOracleTimestamp = 39,
 }

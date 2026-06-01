@@ -24,19 +24,21 @@ use soroban_sdk::{
 use crate::oracle::OracleProvider;
 
 fn expire_policy_if_needed(env: &Env, policy: &mut Policy, policy_id: u64) {
-    if policy.status == PolicyStatus::Active && policy.is_expired(env.ledger().timestamp()) {
-        let expired_at = env.ledger().timestamp();
-        policy.status = PolicyStatus::Expired;
-        storage::set_policy(env, policy_id, policy);
-        events::publish_policy_expired(
-            env,
-            &PolicyExpiredEvent {
-                policy_id,
-                policyholder: policy.policyholder.clone(),
-                end_time: policy.end_time,
-                expired_at,
-            },
-        );
+    if let Ok(raw_policy) = storage::get_policy_raw(env, policy_id) {
+        if raw_policy.status == PolicyStatus::Active && raw_policy.is_expired(env.ledger().timestamp()) {
+            let expired_at = env.ledger().timestamp();
+            policy.status = PolicyStatus::Expired;
+            storage::set_policy(env, policy_id, policy);
+            events::publish_policy_expired(
+                env,
+                &PolicyExpiredEvent {
+                    policy_id,
+                    policyholder: policy.policyholder.clone(),
+                    end_time: policy.end_time,
+                    expired_at,
+                },
+            );
+        }
     }
 }
 
@@ -390,20 +392,70 @@ impl StellarInsure {
         oracle_type: Symbol,
         parameter: Symbol,
     ) -> Result<oracle::OracleResult, Error> {
-        let result = if oracle_type == symbol_short!("Weather") {
+        let res_oracle = if oracle_type == symbol_short!("Weather") {
             oracle::WeatherOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         } else if oracle_type == symbol_short!("Flight") {
             oracle::FlightOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         } else if oracle_type == symbol_short!("Price") {
             oracle::PriceOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         } else {
             oracle::SmartContractOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         };
-        Ok(result)
+
+        match res_oracle {
+            Ok(result) => Ok(result),
+            Err(oracle::OracleError::DataUnavailable) => {
+                storage::set_paused(&env, true);
+                events::publish_contract_paused(
+                    &env,
+                    &ContractPausedEvent {
+                        admin: env.current_contract_address(),
+                        timestamp: env.ledger().timestamp(),
+                    },
+                );
+                Err(Error::OracleDataUnavailable)
+            }
+            Err(oracle::OracleError::VerificationFailed) => {
+                if oracle_type == symbol_short!("Price") {
+                    Err(Error::InvalidOracleTimestamp)
+                } else {
+                    Err(Error::OracleVerificationFailed)
+                }
+            }
+            Err(_) => Err(Error::OracleVerificationFailed),
+        }
+    }
+
+    pub fn set_price_freshness_window(env: Env, admin: Address, window: u64) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        storage::set_price_freshness_window(&env, window);
+        Ok(())
+    }
+
+    pub fn get_price_freshness_window(env: Env) -> u64 {
+        storage::get_price_freshness_window(&env)
+    }
+
+    pub fn update_price_feed(env: Env, price: i128, timestamp: u64) {
+        storage::set_latest_price(&env, price);
+        storage::set_latest_price_timestamp(&env, timestamp);
+        
+        let current_time = env.ledger().timestamp();
+        let freshness_window = storage::get_price_freshness_window(&env);
+        if current_time > timestamp && current_time - timestamp > freshness_window {
+            storage::set_paused(&env, true);
+            events::publish_contract_paused(
+                &env,
+                &ContractPausedEvent {
+                    admin: env.current_contract_address(),
+                    timestamp: env.ledger().timestamp(),
+                },
+            );
+        }
     }
 
     // ── Issue #198 — Oracle integration functions ────────────────────────────

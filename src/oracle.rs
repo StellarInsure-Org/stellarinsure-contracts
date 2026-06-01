@@ -71,8 +71,22 @@ impl OracleProvider for SmartContractOracle {
 pub struct PriceOracle;
 impl OracleProvider for PriceOracle {
     fn verify_condition(env: &Env, _parameter: Symbol) -> Result<OracleResult, OracleError> {
-        // Production implementation would query price feeds
-        // Example: Check if asset price dropped below threshold
+        let price_timestamp = crate::storage::get_latest_price_timestamp(env);
+        if price_timestamp == 0 {
+            return Err(OracleError::DataUnavailable);
+        }
+        
+        let current_time = env.ledger().timestamp();
+        let freshness_window = crate::storage::get_price_freshness_window(env);
+        
+        if price_timestamp > current_time {
+            return Err(OracleError::VerificationFailed);
+        }
+        
+        if current_time - price_timestamp > freshness_window {
+            return Err(OracleError::DataUnavailable);
+        }
+        
         Ok(OracleResult {
             is_verified: true,
             details: String::from_str(env, "Price condition verified"),
