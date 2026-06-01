@@ -1769,3 +1769,57 @@ fn test_get_policy_implicitly_expires_stale_policy() {
     let policy = client.get_policy(&policy_id);
     assert_eq!(policy.status, PolicyStatus::Expired);
 }
+
+#[test]
+fn test_double_initialization_fails() {
+    let (env, contract_id, _admin, _policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    
+    // Attempt second init, which should fail with AlreadyInitialized error
+    let second_admin = Address::generate(&env);
+    let res = client.try_init(&second_admin);
+    assert_eq!(res, Err(Ok(crate::Error::AlreadyInitialized)));
+}
+
+#[test]
+fn test_admin_authorization_failures_return_error() {
+    let (env, contract_id, _admin, _policyholder, token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+    
+    let non_admin = Address::generate(&env);
+    
+    // set_premium_token with non-admin should return Unauthorized (code 8)
+    let res_premium = client.try_set_premium_token(&non_admin, &token);
+    assert_eq!(res_premium, Err(Ok(crate::Error::Unauthorized)));
+
+    // set_risk_pool with non-admin should return Unauthorized (code 8)
+    let fake_risk_pool = Address::generate(&env);
+    let res_risk = client.try_set_risk_pool(&non_admin, &fake_risk_pool);
+    assert_eq!(res_risk, Err(Ok(crate::Error::Unauthorized)));
+}
+
+#[test]
+fn test_risk_pool_yield_distribution_rounding_remainder() {
+    let (env, contract_id, _admin, provider_one, provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    // Setup: Provider 1 contributes 100, Provider 2 contributes 200 (Total = 300)
+    client.add_liquidity(&provider_one, &100);
+    client.add_liquidity(&provider_two, &200);
+
+    // Distribute a yield amount of 2, which causes remainder:
+    // Provider 1 share = 2 * 100 / 300 = 0
+    // Provider 2 share = 2 * 200 / 300 = 1
+    // Total credited = 0 + 1 = 1 (leaving remainder 1)
+    client.distribute_yield(&2);
+
+    let pos1 = client.get_provider_position(&provider_one);
+    let pos2 = client.get_provider_position(&provider_two);
+
+    // Assert: Rounding behavior is explicit (integer division, no one gets more than proportional)
+    assert_eq!(pos1.accrued_yield, 0);
+    assert_eq!(pos2.accrued_yield, 1);
+    
+    // Assert: Total credited yield (1) is <= distributed amount (2)
+    assert!(pos1.accrued_yield + pos2.accrued_yield <= 2);
+}

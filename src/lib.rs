@@ -56,7 +56,10 @@ const MAX_TRIGGER_CONDITION_LEN: u32 = 256;
 #[contractimpl]
 impl StellarInsure {
     /// Initialize the insurance protocol
-    pub fn init(env: Env, admin: Address) {
+    pub fn init(env: Env, admin: Address) -> Result<(), Error> {
+        if storage::has_admin(&env) {
+            return Err(Error::AlreadyInitialized);
+        }
         storage::set_admin(&env, &admin);
         // Bootstrap multi-sig admin list with the initial admin (threshold = 1)
         let mut admins = Vec::new(&env);
@@ -67,6 +70,7 @@ impl StellarInsure {
         storage::set_max_policies(&env, MAX_POLICIES);
         // Default oracle quorum: at least 1 oracle must confirm
         storage::set_oracle_quorum_threshold(&env, 1);
+        Ok(())
     }
 
     /// Set the maximum number of policies allowed (admin only)
@@ -89,20 +93,21 @@ impl StellarInsure {
     }
 
     /// Set the token used for premiums and payouts (admin only)
-    pub fn set_premium_token(env: Env, admin: Address, token: Address) {
+    pub fn set_premium_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         admin.require_auth();
         let current_admin = storage::get_admin(&env);
         if admin != current_admin {
-            panic!("Unauthorized");
+            return Err(Error::Unauthorized);
         }
         storage::set_premium_token(&env, &token);
+        Ok(())
     }
 
-    pub fn set_risk_pool(env: Env, admin: Address, risk_pool: Address) {
+    pub fn set_risk_pool(env: Env, admin: Address, risk_pool: Address) -> Result<(), Error> {
         admin.require_auth();
         let current_admin = storage::get_admin(&env);
         if admin != current_admin {
-            panic!("Unauthorized");
+            return Err(Error::Unauthorized);
         }
         storage::set_risk_pool(&env, &risk_pool);
 
@@ -110,6 +115,7 @@ impl StellarInsure {
             caller: admin,
             risk_pool,
         });
+        Ok(())
     }
 
     /// Create a new insurance policy
