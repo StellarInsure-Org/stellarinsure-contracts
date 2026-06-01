@@ -191,6 +191,23 @@ fn test_process_claim_approve_updates_claim_and_policy() {
 }
 
 #[test]
+fn test_process_claim_approve_updates_total_payouts() {
+    let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
+    let client = StellarInsureClient::new(&env, &contract_id);
+
+    let stats_before = client.get_treasury_stats().unwrap();
+    let initial_payouts = stats_before.total_payouts_distributed;
+
+    let policy_id = create_policy(&env, &client, &policyholder);
+    let claim_amount = 500_000i128;
+    client.submit_claim(&policy_id, &claim_amount, &String::from_str(&env, "proof"));
+    client.process_claim(&policy_id, &true);
+
+    let stats_after = client.get_treasury_stats().unwrap();
+    assert_eq!(stats_after.total_payouts_distributed, initial_payouts + claim_amount);
+}
+
+#[test]
 fn test_process_claim_reject_sets_rejected_status() {
     let (env, contract_id, _admin, policyholder, _token) = setup_insurance_contract();
     let client = StellarInsureClient::new(&env, &contract_id);

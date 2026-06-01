@@ -351,7 +351,9 @@ impl StellarInsure {
             }
 
             let total_payouts = storage::get_total_payouts(&env);
-            storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
+            let new_total = total_payouts.checked_add(claim.claim_amount)
+                .ok_or(Error::ClaimAmountOverflow)?;
+            storage::set_total_payouts(&env, new_total);
 
             events::publish_payout(
                 &env,
@@ -571,7 +573,9 @@ impl StellarInsure {
             }
 
             let total_payouts = storage::get_total_payouts(&env);
-            storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
+            let new_total = total_payouts.checked_add(claim.claim_amount)
+                .ok_or(Error::ClaimAmountOverflow)?;
+            storage::set_total_payouts(&env, new_total);
 
             storage::set_policy(&env, policy_id, &policy);
             storage::set_claim(&env, policy_id, &claim);
@@ -1029,7 +1033,9 @@ impl StellarInsure {
             token_client.transfer(&contract_address, &policy.policyholder, &claim.claim_amount);
 
             let total_payouts = storage::get_total_payouts(&env);
-            storage::set_total_payouts(&env, total_payouts + claim.claim_amount);
+            let new_total = total_payouts.checked_add(claim.claim_amount)
+                .ok_or(Error::ClaimAmountOverflow)?;
+            storage::set_total_payouts(&env, new_total);
 
             events::publish_payout(
                 &env,
