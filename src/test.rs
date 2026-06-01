@@ -1478,6 +1478,37 @@ fn test_full_withdrawal_with_multiple_providers_only_removes_correct_one() {
     assert!(result.is_err());
 }
 
+// ── Issue #386 — Reserve ratio boundary values ─────────────────────────────
+
+#[test]
+fn test_reserve_ratio_boundary_zero_accepted() {
+    let (env, contract_id, admin, _provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    client.set_reserve_ratio(&admin, &0);
+    let ratio = client.get_reserve_ratio();
+    assert_eq!(ratio, 0);
+}
+
+#[test]
+fn test_reserve_ratio_boundary_max_10000_accepted() {
+    let (env, contract_id, admin, _provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    client.set_reserve_ratio(&admin, &10000);
+    let ratio = client.get_reserve_ratio();
+    assert_eq!(ratio, 10000);
+}
+
+#[test]
+#[should_panic(expected = "InvalidAmount")]
+fn test_reserve_ratio_boundary_above_10000_rejected() {
+    let (env, contract_id, admin, _provider_one, _provider_two) = setup_risk_pool();
+    let client = RiskPoolClient::new(&env, &contract_id);
+
+    client.set_reserve_ratio(&admin, &10001);
+}
+
 #[test]
 #[should_panic]
 fn test_full_withdrawal_removes_provider_after_claiming_yield() {
