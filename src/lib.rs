@@ -24,19 +24,21 @@ use soroban_sdk::{
 use crate::oracle::OracleProvider;
 
 fn expire_policy_if_needed(env: &Env, policy: &mut Policy, policy_id: u64) {
-    if policy.status == PolicyStatus::Active && policy.is_expired(env.ledger().timestamp()) {
-        let expired_at = env.ledger().timestamp();
-        policy.status = PolicyStatus::Expired;
-        storage::set_policy(env, policy_id, policy);
-        events::publish_policy_expired(
-            env,
-            &PolicyExpiredEvent {
-                policy_id,
-                policyholder: policy.policyholder.clone(),
-                end_time: policy.end_time,
-                expired_at,
-            },
-        );
+    if let Ok(raw_policy) = storage::get_policy_raw(env, policy_id) {
+        if raw_policy.status == PolicyStatus::Active && raw_policy.is_expired(env.ledger().timestamp()) {
+            let expired_at = env.ledger().timestamp();
+            policy.status = PolicyStatus::Expired;
+            storage::set_policy(env, policy_id, policy);
+            events::publish_policy_expired(
+                env,
+                &PolicyExpiredEvent {
+                    policy_id,
+                    policyholder: policy.policyholder.clone(),
+                    end_time: policy.end_time,
+                    expired_at,
+                },
+            );
+        }
     }
 }
 
@@ -54,7 +56,10 @@ const MAX_TRIGGER_CONDITION_LEN: u32 = 256;
 #[contractimpl]
 impl StellarInsure {
     /// Initialize the insurance protocol
-    pub fn init(env: Env, admin: Address) {
+    pub fn init(env: Env, admin: Address) -> Result<(), Error> {
+        if storage::has_admin(&env) {
+            return Err(Error::AlreadyInitialized);
+        }
         storage::set_admin(&env, &admin);
         // Bootstrap multi-sig admin list with the initial admin (threshold = 1)
         let mut admins = Vec::new(&env);
@@ -63,6 +68,9 @@ impl StellarInsure {
         storage::set_threshold(&env, 1);
         storage::set_policy_counter(&env, 0);
         storage::set_max_policies(&env, MAX_POLICIES);
+        // Default oracle quorum: at least 1 oracle must confirm
+        storage::set_oracle_quorum_threshold(&env, 1);
+        Ok(())
     }
 
     /// Set the maximum number of policies allowed (admin only)
@@ -85,20 +93,21 @@ impl StellarInsure {
     }
 
     /// Set the token used for premiums and payouts (admin only)
-    pub fn set_premium_token(env: Env, admin: Address, token: Address) {
+    pub fn set_premium_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         admin.require_auth();
         let current_admin = storage::get_admin(&env);
         if admin != current_admin {
-            panic!("Unauthorized");
+            return Err(Error::Unauthorized);
         }
         storage::set_premium_token(&env, &token);
+        Ok(())
     }
 
-    pub fn set_risk_pool(env: Env, admin: Address, risk_pool: Address) {
+    pub fn set_risk_pool(env: Env, admin: Address, risk_pool: Address) -> Result<(), Error> {
         admin.require_auth();
         let current_admin = storage::get_admin(&env);
         if admin != current_admin {
-            panic!("Unauthorized");
+            return Err(Error::Unauthorized);
         }
         storage::set_risk_pool(&env, &risk_pool);
 
@@ -106,6 +115,7 @@ impl StellarInsure {
             caller: admin,
             risk_pool,
         });
+        Ok(())
     }
 
     /// Create a new insurance policy
@@ -390,22 +400,70 @@ impl StellarInsure {
         oracle_type: Symbol,
         parameter: Symbol,
     ) -> Result<oracle::OracleResult, Error> {
-        let result = if oracle_type == symbol_short!("Weather") {
+        let res_oracle = if oracle_type == symbol_short!("Weather") {
             oracle::WeatherOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         } else if oracle_type == symbol_short!("Flight") {
             oracle::FlightOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         } else if oracle_type == symbol_short!("Price") {
             oracle::PriceOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
-        } else if oracle_type == symbol_short!("SmartContract") {
-            oracle::SmartContractOracle::verify_condition(&env, parameter)
-                .map_err(|_| Error::OracleVerificationFailed)?
         } else {
-            return Err(Error::OracleVerificationFailed);
+            oracle::SmartContractOracle::verify_condition(&env, parameter)
         };
-        Ok(result)
+
+        match res_oracle {
+            Ok(result) => Ok(result),
+            Err(oracle::OracleError::DataUnavailable) => {
+                storage::set_paused(&env, true);
+                events::publish_contract_paused(
+                    &env,
+                    &ContractPausedEvent {
+                        admin: env.current_contract_address(),
+                        timestamp: env.ledger().timestamp(),
+                    },
+                );
+                Err(Error::OracleDataUnavailable)
+            }
+            Err(oracle::OracleError::VerificationFailed) => {
+                if oracle_type == symbol_short!("Price") {
+                    Err(Error::InvalidOracleTimestamp)
+                } else {
+                    Err(Error::OracleVerificationFailed)
+                }
+            }
+            Err(_) => Err(Error::OracleVerificationFailed),
+        }
+    }
+
+    pub fn set_price_freshness_window(env: Env, admin: Address, window: u64) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        storage::set_price_freshness_window(&env, window);
+        Ok(())
+    }
+
+    pub fn get_price_freshness_window(env: Env) -> u64 {
+        storage::get_price_freshness_window(&env)
+    }
+
+    pub fn update_price_feed(env: Env, price: i128, timestamp: u64) {
+        storage::set_latest_price(&env, price);
+        storage::set_latest_price_timestamp(&env, timestamp);
+        
+        let current_time = env.ledger().timestamp();
+        let freshness_window = storage::get_price_freshness_window(&env);
+        if current_time > timestamp && current_time - timestamp > freshness_window {
+            storage::set_paused(&env, true);
+            events::publish_contract_paused(
+                &env,
+                &ContractPausedEvent {
+                    admin: env.current_contract_address(),
+                    timestamp: env.ledger().timestamp(),
+                },
+            );
+        }
     }
 
     // ── Issue #198 — Oracle integration functions ────────────────────────────
@@ -507,7 +565,30 @@ impl StellarInsure {
         storage::get_oracle_types(&env)
     }
 
-    /// Evaluate trigger condition against oracle data and automatically approve claim if met
+    // ── Issue #438 — Oracle quorum threshold ─────────────────────────────────
+
+    /// Set the minimum number of oracle confirmations required before
+    /// price-dependent actions execute. Must be >= 1. Admin only.
+    pub fn set_oracle_quorum_threshold(env: Env, admin: Address, threshold: u32) -> Result<(), Error> {
+        admin.require_auth();
+        let current_admin = storage::get_admin(&env);
+        if admin != current_admin {
+            return Err(Error::Unauthorized);
+        }
+        if threshold == 0 {
+            return Err(Error::InvalidQuorumThreshold);
+        }
+        storage::set_oracle_quorum_threshold(&env, threshold);
+        Ok(())
+    }
+
+    /// Get the current oracle quorum threshold.
+    pub fn get_oracle_quorum_threshold(env: Env) -> u32 {
+        storage::get_oracle_quorum_threshold(&env)
+    }
+
+    /// Evaluate trigger condition against oracle data and automatically approve claim if met.
+    /// Requires at least `oracle_quorum_threshold` registered oracles to confirm the condition.
     pub fn evaluate_oracle_trigger(
         env: Env,
         caller: Address,
@@ -536,7 +617,24 @@ impl StellarInsure {
             return Err(Error::Unauthorized);
         }
 
-        // Evaluate condition using oracle
+        // Enforce quorum: count how many registered oracle types confirm the condition
+        let quorum_threshold = storage::get_oracle_quorum_threshold(&env);
+        let oracle_types = storage::get_oracle_types(&env);
+        let mut confirmations: u32 = 0;
+        for ot in oracle_types.iter() {
+            if storage::get_oracle_address(&env, &ot).is_some() {
+                let result = Self::verify_oracle_condition(env.clone(), ot, parameter.clone());
+                if let Ok(r) = result {
+                    if r.is_verified {
+                        confirmations += 1;
+                    }
+                }
+            }
+        }
+
+        let condition_met = confirmations >= quorum_threshold;
+
+        // Evaluate the primary oracle for event details
         let oracle_result = Self::verify_oracle_condition(env.clone(), oracle_type.clone(), parameter)?;
 
         events::publish_oracle_trigger_evaluated(
@@ -544,13 +642,13 @@ impl StellarInsure {
             &OracleTriggerEvaluatedEvent {
                 policy_id,
                 oracle_type: oracle_type.clone(),
-                condition_met: oracle_result.is_verified,
+                condition_met,
                 details: oracle_result.details.clone(),
             },
         );
 
-        // Automatically approve claim if condition is met
-        if oracle_result.is_verified {
+        // Automatically approve claim only if quorum is reached
+        if condition_met {
             let mut claim = storage::get_claim(&env, policy_id)?;
             policy.status = PolicyStatus::ClaimApproved;
             claim.approved = true;

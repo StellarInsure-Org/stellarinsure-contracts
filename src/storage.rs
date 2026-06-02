@@ -1,6 +1,6 @@
 use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
 
-use crate::{Claim, ClaimVotes, Error, Policy, PoolStats, ProviderPosition, Providers};
+use crate::{Claim, ClaimVotes, Error, Policy, PolicyStatus, PoolStats, ProviderPosition, Providers};
 
 /// Enumeration of all persistent and instance storage keys used by the contract.
 ///
@@ -101,6 +101,10 @@ enum DataKey {
     /// Ordered list of all oracle type `Symbol`s that have been registered.
     /// Used to enumerate active oracles without requiring off-chain indexing.
     OracleAddresses,
+
+    PriceFreshnessWindow,
+    LatestPrice,
+    LatestPriceTimestamp,
 }
 
 pub fn get_version(env: &Env) -> u32 {
@@ -127,6 +131,10 @@ pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
 }
 
+pub fn has_admin(env: &Env) -> bool {
+    env.storage().instance().has(&DataKey::Admin)
+}
+
 pub fn get_admin(env: &Env) -> Address {
     env.storage().instance().get(&DataKey::Admin).unwrap()
 }
@@ -150,11 +158,19 @@ pub fn set_policy(env: &Env, policy_id: u64, policy: &Policy) {
         .set(&policy_key(policy_id), policy);
 }
 
-pub fn get_policy(env: &Env, policy_id: u64) -> Result<Policy, Error> {
+pub fn get_policy_raw(env: &Env, policy_id: u64) -> Result<Policy, Error> {
     env.storage()
         .persistent()
         .get(&policy_key(policy_id))
         .ok_or(Error::PolicyNotFound)
+}
+
+pub fn get_policy(env: &Env, policy_id: u64) -> Result<Policy, Error> {
+    let mut policy = get_policy_raw(env, policy_id)?;
+    if policy.status == PolicyStatus::Active && policy.is_expired(env.ledger().timestamp()) {
+        policy.status = PolicyStatus::Expired;
+    }
+    Ok(policy)
 }
 
 pub fn set_claim(env: &Env, policy_id: u64, claim: &Claim) {
@@ -477,6 +493,24 @@ pub fn get_oracle_types(env: &Env) -> Vec<Symbol> {
         .unwrap_or(Vec::new(env))
 }
 
+// ── Issue #438 — Oracle quorum threshold ─────────────────────────────────────
+
+/// Set the minimum number of oracle confirmations required for price-dependent actions.
+/// `threshold` must be >= 1.
+pub fn set_oracle_quorum_threshold(env: &Env, threshold: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::OracleQuorumThreshold, &threshold);
+}
+
+/// Get the oracle quorum threshold. Defaults to 1 if not explicitly set.
+pub fn get_oracle_quorum_threshold(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::OracleQuorumThreshold)
+        .unwrap_or(1)
+}
+
 /// Remove an oracle address registration
 pub fn remove_oracle_address(env: &Env, oracle_type: &Symbol) {
     env.storage()
@@ -494,4 +528,43 @@ pub fn remove_oracle_address(env: &Env, oracle_type: &Symbol) {
     env.storage()
         .persistent()
         .set(&DataKey::OracleAddresses, &filtered);
+}
+
+pub fn get_price_freshness_window(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::PriceFreshnessWindow)
+        .unwrap_or(86400) // Default to 24 hours
+}
+
+pub fn set_price_freshness_window(env: &Env, window: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::PriceFreshnessWindow, &window);
+}
+
+pub fn get_latest_price(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::LatestPrice)
+        .unwrap_or(0)
+}
+
+pub fn set_latest_price(env: &Env, price: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::LatestPrice, &price);
+}
+
+pub fn get_latest_price_timestamp(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&DataKey::LatestPriceTimestamp)
+        .unwrap_or(0)
+}
+
+pub fn set_latest_price_timestamp(env: &Env, timestamp: u64) {
+    env.storage()
+        .instance()
+        .set(&DataKey::LatestPriceTimestamp, &timestamp);
 }
